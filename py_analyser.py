@@ -37,7 +37,7 @@ if __name__ == '__main__':
     parser.add_argument('patterns', help='patterns file to be checked', type=str)
     parser.add_argument('--log-level', default='INFO', help='log level', choices=['INFO', 'DEBUG', 'WARNING', 'ERROR', 'CRITICAL'])
     parser.add_argument('--log-file', default=f"{project_root}/analyser.log", help='log file location', type=str)
-    parser.add_argument('--output-folder', default=f"{project_root}/output/", help='output folder location', type=str)
+    parser.add_argument('--output-folder', default=f"{project_root}/output", help='output folder location', type=str)
     args = parser.parse_args()
 
     logging_level = LOG_LEVELS.get(args.log_level, logging.INFO)
@@ -62,6 +62,6 @@ if __name__ == '__main__':
     # TODO: Implement analysis
 
     # TODO: Export results
-    output_file_name = f"{args.output_folder}{extract_filename_without_extension(args.slice)}.output.json"
+    output_file_name = f"{args.output_folder}/{extract_filename_without_extension(args.slice)}.output.json"
     with open(output_file_name, 'w') as f:
         f.write('[]')
