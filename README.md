@@ -20,3 +20,16 @@ To run the tool in debug mode append the `--log-level DEBUG` flag:
 python3 py_analyser.py <slice>.py <pattern>.json --log-level DEBUG
 ```
 
+
+## Testing Pipeline
+
+There is a gitlab pipeline that tests the tool automatically. The pipeline can be found at [.gitlab-ci.yml](.gitlab-ci.yml).
+
+### Stages
+There are 2 stages in this pipeline:
+- `Analyse`:
+    - There is 1 job for each set of tests
+    - Each job will run the tool for each test in the set. `Logs`, `Outputs` and `Expected Outputs` are saved in the artifacts
+- `Test`:
+    - There is 1 job for each set of tests
+    - Each job will load the artifacts from the previous stage and compare the outputs with the expected outputs

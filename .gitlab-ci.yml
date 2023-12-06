@@ -2,10 +2,12 @@ image: samuelbarata/ssof:latest
 
 stages:
   - Analyse
+  - Test
 
 variables:
   LOG_LEVEL: DEBUG
   TOOL_NAME: py_analyser.py
+  TEST_TOOL_NAME: diff
 
 Specification Slices:
   stage: Analyse
@@ -14,23 +16,45 @@ Specification Slices:
   variables:
     SLICES_FOLDER: Specification/slices
     OUTPUT_FOLDER: output
+    EXPECTED_OUTPUT_FOLDER: expected_output
     LOGS_FOLDER: logs
   script:
     - mkdir -p $LOGS_FOLDER
     - mkdir -p $OUTPUT_FOLDER
+    - mkdir -p $EXPECTED_OUTPUT_FOLDER
     - |
       for file in $SLICES_FOLDER/*.py; do
         slice_file=$(basename -- "$file")
         base_name_no_extension="${slice_file%.py}"
         patterns_file="${base_name_no_extension}.patterns.json"
         log_file="${base_name_no_extension}.log"
+        expected_output_file="${base_name_no_extension}.output.json"
         echo "Slices folder: $SLICES_FOLDER"
         echo "Slice: $slice_file"
         echo "Patterns: $patterns_file"
+        echo "Expected Output: $expected_output_file"
+        cp $SLICES_FOLDER/${expected_output_file} $EXPECTED_OUTPUT_FOLDER/${expected_output_file}
         python3 $TOOL_NAME "$SLICES_FOLDER/${slice_file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $LOGS_FOLDER/$log_file --output-folder $OUTPUT_FOLDER
       done
   artifacts:
     paths:
       - $OUTPUT_FOLDER
       - $LOGS_FOLDER
+      - $EXPECTED_OUTPUT_FOLDER
     expire_in: 1 week
+
+Specification Slices Test:
+  stage: Test
+  needs:
+    - job: Specification Slices
+      artifacts: true
+  variables:
+    OUTPUT_FOLDER: output
+    EXPECTED_OUTPUT_FOLDER: expected_output
+  script:
+    - |
+      for file in $EXPECTED_OUTPUT_FOLDER/*.output.json; do
+        output_file=$(basename -- "$file")
+        diff $OUTPUT_FOLDER/${output_file} $EXPECTED_OUTPUT_FOLDER/${output_file}
+      done
+
