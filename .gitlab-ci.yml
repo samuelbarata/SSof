@@ -17,6 +17,7 @@ Specification Slices:
     LOGS_FOLDER: logs
   script:
     - mkdir -p $LOGS_FOLDER
+    - mkdir -p $OUTPUT_FOLDER
     - |
       for file in $SLICES_FOLDER/*.py; do
         slice_file=$(basename -- "$file")

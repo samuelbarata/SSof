@@ -63,5 +63,8 @@ if __name__ == '__main__':
 
     # TODO: Export results
     output_file_name = f"{args.output_folder}/{extract_filename_without_extension(args.slice)}.output.json"
+    # Create putput directory if it doesn't exist
+    if not os.path.exists(args.output_folder):
+        os.makedirs(args.output_folder)
     with open(output_file_name, 'w') as f:
         f.write('[]')
