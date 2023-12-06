@@ -22,7 +22,11 @@ Specification Slices:
         base_name_no_extension="${base_name%.py}"
         patterns_file="${base_name_no_extension}.patterns.json"
         log_file="${base_name_no_extension}.log"
+        echo "Slices folder: $SLICES_FOLDER"
+        echo "Slice: $file"
+        echo "Patterns: $patterns_file"
         python3 $TOOL_NAME "$SLICES_FOLDER/${file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $log_file --output-folder $OUTPUT_FOLDER
+
       done
   artifacts:
     paths:
