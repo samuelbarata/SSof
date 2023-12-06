@@ -14,22 +14,22 @@ Specification Slices:
   variables:
     SLICES_FOLDER: Specification/slices
     OUTPUT_FOLDER: output
-    LOG_FILE: analyser.log
+    LOGS_FOLDER: logs
   script:
+    - mkdir -p $LOGS_FOLDER
     - |
       for file in $SLICES_FOLDER/*.py; do
-        base_name=$(basename -- "$file")
-        base_name_no_extension="${base_name%.py}"
+        slice_file=$(basename -- "$file")
+        base_name_no_extension="${slice_file%.py}"
         patterns_file="${base_name_no_extension}.patterns.json"
         log_file="${base_name_no_extension}.log"
         echo "Slices folder: $SLICES_FOLDER"
-        echo "Slice: $file"
+        echo "Slice: $slice_file"
         echo "Patterns: $patterns_file"
-        python3 $TOOL_NAME "$SLICES_FOLDER/${file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $log_file --output-folder $OUTPUT_FOLDER
-
+        python3 $TOOL_NAME "$SLICES_FOLDER/${slice_file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $LOGS_FOLDER/$log_file --output-folder $OUTPUT_FOLDER
       done
   artifacts:
     paths:
       - $OUTPUT_FOLDER
-      - $log_file
+      - $LOGS_FOLDER
     expire_in: 1 week
