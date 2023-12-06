@@ -20,6 +20,15 @@ To run the tool in debug mode append the `--log-level DEBUG` flag:
 python3 py_analyser.py <slice>.py <pattern>.json --log-level DEBUG
 ```
 
+To generate graphical visualization of the AST append the flag `--visualize`:
+```bash
+python3 py_analyser.py <slice>.py <pattern>.json --visualize
+```
+
+For more information about the tool run:
+```bash
+python3 py_analyser.py --help
+```
 
 ## Testing Pipeline
 
