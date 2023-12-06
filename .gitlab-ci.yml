@@ -16,14 +16,16 @@ Specification Slices:
     OUTPUT_FOLDER: output
     LOG_FILE: analyser.log
   script:
-    - for file in $SLICES_FOLDER/*.py; do
+    - |
+      for file in $SLICES_FOLDER/*.py; do
         base_name=$(basename -- "$file")
         base_name_no_extension="${base_name%.py}"
         patterns_file="${base_name_no_extension}.patterns.json"
-        python3 $TOOL_NAME "$SLICES_FOLDER/${file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $LOG_FILE --output-folder $OUTPUT_FOLDER
+        log_file="${base_name_no_extension}.log"
+        python3 $TOOL_NAME "$SLICES_FOLDER/${file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $log_file --output-folder $OUTPUT_FOLDER
       done
   artifacts:
     paths:
       - $OUTPUT_FOLDER
-      - $LOG_FILE
+      - $log_file
     expire_in: 1 week
