@@ -17,6 +17,6 @@ python3 py_analyser.py <slice>.py <pattern>.json
 
 To run the tool in debug mode append the `--log-level DEBUG` flag:
 ```bash
-python3 py_analyser.py <slice>.py <pattern>.json --log DEBUG
+python3 py_analyser.py <slice>.py <pattern>.json --log-level DEBUG
 ```
 
