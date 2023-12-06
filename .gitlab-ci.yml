@@ -14,7 +14,6 @@ Specification Slices:
   variables:
     SLICES_FOLDER: Specification/slices
     OUTPUT_FOLDER: output
-    LOG_FILE: analyser.log
   script:
     - |
       for file in $SLICES_FOLDER/*.py; do
@@ -22,7 +21,7 @@ Specification Slices:
         base_name_no_extension="${base_name%.py}"
         patterns_file="${base_name_no_extension}.patterns.json"
         log_file="${base_name_no_extension}.log"
-        python3 $TOOL_NAME "$SLICES_FOLDER/${file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $log_file --output-folder $OUTPUT_FOLDER
+        python3 $TOOL_NAME "${file}" "${patterns_file}" --log-level $LOG_LEVEL --log-file $log_file --output-folder $OUTPUT_FOLDER
       done
   artifacts:
     paths:
