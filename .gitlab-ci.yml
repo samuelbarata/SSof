@@ -1,0 +1,28 @@
+image: samuelbarata/ssof:latest
+
+stages:
+  - Analyse
+
+Specification Slices:
+  stage: Analyse
+  before_script:
+    - git clone https://gitlab-ci-token:${GITLAB_TOKEN}@${CI_SERVER_HOST}/ssof2324/project/Specification
+  variables:
+    slices_folder: Specification/slices
+    output_folder: output
+    log_name: analyser.log
+    log_level: DEBUG
+  script:
+    - python3 py_analyser.py
+    - for file in *.py; do
+        base_name=$(basename -- "$file")
+        base_name_no_extension="${base_name%.py}"
+        patterns_file="${base_name_no_extension}.patterns.json"
+        python3 py_analyser.py "${slices_folder}/${file}" "${slices_folder}${patterns_file}" --log-level $log_level --log-file $log_name --output-folder ${output_folder}
+      done
+  artifacts:
+    paths:
+      - $output_folder
+      - $log_name
+      - analyser.log
+    expire_in: 1 week

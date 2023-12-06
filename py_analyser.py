@@ -37,23 +37,31 @@ if __name__ == '__main__':
     parser.add_argument('patterns', help='patterns file to be checked', type=str)
     parser.add_argument('--log-level', default='INFO', help='log level', choices=['INFO', 'DEBUG', 'WARNING', 'ERROR', 'CRITICAL'])
     parser.add_argument('--log-file', default=f"{project_root}/analyser.log", help='log file location', type=str)
+    parser.add_argument('--output-folder', default=f"{project_root}/output/", help='output folder location', type=str)
     args = parser.parse_args()
 
     logging_level = LOG_LEVELS.get(args.log_level, logging.INFO)
     logging.basicConfig(filename=args.log_file, level=logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
     logger = logging.getLogger()
 
+    logger.info(f'Starting py_analyser with arguments: {args}')
+
     logger.info('Loading patterns file')
+    logger.debug(f'Patterns file: {args.patterns}')
     with open(args.patterns, 'r') as f:
         patterns_dump = json.load(f)
 
     patterns = [Pattern(pattern) for pattern in patterns_dump]
 
     logger.info('Loading slice file')
-
+    logger.debug(f'Slice file: {args.slice}')
     with open(args.slice, 'r') as f:
         ast_py = ast.parse(f.read())
         logger.debug(ast.dump(ast_py))
 
-    output_file_name = f"{project_root}/output/{extract_filename_without_extension(args.slice)}.output.json"
+    # TODO: Implement analysis
 
+    # TODO: Export results
+    output_file_name = f"{args.output_folder}{extract_filename_without_extension(args.slice)}.output.json"
+    with open(output_file_name, 'w') as f:
+        f.write('[]')
