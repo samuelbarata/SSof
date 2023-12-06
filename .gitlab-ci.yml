@@ -27,5 +27,4 @@ Specification Slices:
     paths:
       - $OUTPUT_FOLDER
       - $LOG_FILE
-      - *.log
     expire_in: 1 week
