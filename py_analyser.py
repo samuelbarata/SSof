@@ -63,6 +63,64 @@ class Pattern:
         logger.debug(f'Loaded pattern:\n{self}')
     def __str__(self):
         return f'Vulnerability: {self.vulnerability}\nSources: {self.sources}\nSanitizers: {self.sanitizers}\nSinks: {self.sinks}\nImplicit: {self.implicit}'
+    def __repr__(self) -> str:
+        return self.__str__()
+
+class Taint:
+    def __init__(self, source:str, source_line:int, implicit:bool=False, sanitized:bool=False):
+        self.source = source
+        self.source_line = source_line
+        self.implicit = implicit
+        self.sanitized = sanitized
+
+
+class Analyser:
+    def __init__(self, ast, patterns):
+        self.ast = ast
+        self.patterns: list[Pattern] = patterns
+        logger.debug(f'Added patterns to Analyser:\n{self.patterns}')
+
+    def export_results(self) -> str:
+        return json.dumps(['none'])
+        if len(self.vulnerabilities) == 0:
+            return json.dumps(['none'])
+        else:
+            return json.dumps([str(vulnerability) for vulnerability in self.vulnerabilities])
+
+    def analyse(self):
+        for statement in self.ast.body:
+            self.analyse_statement(statement)
+
+    def analyse_statement(self, statement) -> list(Taint):
+        match statement:
+            case ast.Assign():
+                return self.assign(statement)
+            case ast.Expr():
+                return self.expression(statement)
+            case ast.Call():
+                return self.call(statement)
+            case _:
+                logger.critical(f'Unknown statement type: {statement}')
+                raise TypeError(f'Unknown statement type: {statement}')
+
+    def assign(self, assignment: ast.Assign) -> list(Taint):
+        # Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=''))
+
+        pass
+
+    def expression(self, expression: ast.Expr) -> list(Taint):
+        # Expr(value=Call(func=Name(id='e', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[]))
+
+        pass
+
+    def call(self, call: ast.Call) -> list(Taint):
+        # Call(func=Name(id='c', ctx=Load()), args=[], keywords=[])
+        ret = []
+        for pattern in self.patterns:
+            if call.func.id in pattern.sources:
+
+
+        pass
 
 if __name__ == '__main__':
     project_root = os.path.dirname(os.path.abspath(__file__))
@@ -103,10 +161,10 @@ if __name__ == '__main__':
             make_folder_exist(args.visualize_folder)
             visualizer(ast_py, name=extract_filename_without_extension(args.slice), folder=args.visualize_folder)
 
-    # TODO: Implement analysis
+    analyser = Analyser(ast_py, patterns)
+    analyser.analyse()
 
-    # TODO: Export results
     output_file_name = f"{args.output_folder}/{extract_filename_without_extension(args.slice)}.output.json"
     make_folder_exist(args.output_folder)
     with open(output_file_name, 'w') as f:
-        f.write('[]')
+        f.write(analyser.export_results())
