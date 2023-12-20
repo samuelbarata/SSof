@@ -7,7 +7,6 @@ stages:
 variables:
   LOG_LEVEL: DEBUG
   TOOL_NAME: py_analyser.py
-  TEST_TOOL_NAME: diff
 
 Specification Slices:
   stage: Analyse
@@ -55,6 +54,5 @@ Specification Slices Test:
     - |
       for file in $EXPECTED_OUTPUT_FOLDER/*.output.json; do
         output_file=$(basename -- "$file")
-        diff $OUTPUT_FOLDER/${output_file} $EXPECTED_OUTPUT_FOLDER/${output_file}
+        python3 validate.py --output $OUTPUT_FOLDER/${output_file} --target $EXPECTED_OUTPUT_FOLDER/${output_file}
       done
-
