@@ -68,7 +68,7 @@ class Pattern:
         logger.debug(f'Loaded pattern:\n{self}')
 
     def __str__(self):
-        return f'Vulnerability: {self.vulnerability}\nSources: {self.sources}\nSanitizers: {self.sanitizers}\nSinks: {self.sinks}\nImplicit: {self.implicit}'
+        return f'\nVulnerability: {self.vulnerability}, Sources: {self.sources}, Sanitizers: {self.sanitizers}, Sinks: {self.sinks}, Implicit: {self.implicit}'
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -89,7 +89,7 @@ class Taint:
         return len(self.sanitizer) > 0
 
     def __repr__(self) -> str:
-        return f"Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.is_sanitized()}, Pattern: {self.pattern_name}"
+        return f"Taint(Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.is_sanitized()}, Pattern: {self.pattern_name})"
 
 
 class Vulnerability:
@@ -182,12 +182,15 @@ class Analyser:
                 raise TypeError(f'Unknown statement type: {statement}')
 
     def bin_op(self, bin_op: ast.BinOp) -> list[Taint]:
-        return self.analyse_statement(bin_op.left) + self.analyse_statement(bin_op.right)
+        taints = self.analyse_statement(bin_op.left) + self.analyse_statement(bin_op.right)
+        logger.debug(f'L{bin_op.lineno} {bin_op.op}: {taints}')
+        return taints
 
     def name(self, name: ast.Name) -> list[Taint]:
         # Name(id='a', ctx=Load())
         # Uninitialized variable
         if name.id not in self.variables:
+            logger.debug(f'L{name.lineno} Uninitialized variable {name.id}: {taints}')
             return [Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns]
 
         taints = self.variables[name.id]
@@ -196,19 +199,18 @@ class Analyser:
             if name.id in pattern.sources:
                 taints.append(Taint(name.id, name.lineno, pattern.vulnerability))
                 self.variables[name.id] = taints
+        logger.debug(f'L{name.lineno} {name.id}: {taints}')
         return self.variables[name.id]
 
     def assign(self, assignment: ast.Assign) -> list[Taint]:
         # Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=''))
         # TODO?: Handle multiple targets
-        # FIXME: REMOVE THIS LATER
         assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
-        # END FIX-ME
 
         variable_name = assignment.targets[0].id
         taints = self.analyse_statement(assignment.value)
         self.variables[variable_name] = taints
-        logger.debug(f'Assigning {taints} to {variable_name}')
+        logger.debug(f'L{assignment.lineno} {variable_name}: {taints}')
 
         for pattern in self.patterns:
             # Variable is Sink
@@ -225,7 +227,9 @@ class Analyser:
 
     def expression(self, expression: ast.Expr) -> list[Taint]:
         # Expr(value=Call(func=Name(id='e', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[]))
-        return self.analyse_statement(expression.value)
+        taints = self.analyse_statement(expression.value)
+        logger.debug(f'L{expression.lineno}: {taints}')
+        return taints
 
     def call(self, call: ast.Call) -> list[Taint]:
         # Call(func=Name(id='c', ctx=Load()), args=[], keywords=[])
@@ -248,15 +252,17 @@ class Analyser:
                         vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), call.func.id, call.lineno)
                         self.vulnerabilities.append(vuln)
                         logger.info(f"Found vulnerability: {vuln.name}")
-                        logger.debug(f"Vulnerability details: {vuln}")
+                        logger.debug(f"L{call.lineno} Vulnerability details: {vuln}")
             # Pattern Sanitizers
             if call.func.id in pattern.sanitizers:
                 for taint in argument_taints:
                     if taint.pattern_name == pattern.vulnerability:
                         taint.add_sanitizer(call.func.id, call.lineno)
-                        logger.info(f"Sanitized taint: {taint} for pattern: {pattern.vulnerability}")
+                        logger.info(f"L{call.lineno} Sanitized taint: {taint} for pattern: {pattern.vulnerability}")
 
-        return pattern_taints + argument_taints
+        taints = pattern_taints + argument_taints
+        logger.debug(f'L{call.lineno} {call.func.id}: {taints}')
+        return taints
 
 
 if __name__ == '__main__':
@@ -274,7 +280,7 @@ if __name__ == '__main__':
 
     # Setup logging
     logging_level = LOG_LEVELS.get(args.log_level, logging.INFO)
-    logging.basicConfig(filename=args.log_file, level=logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(filename=args.log_file, level=logging_level, format='%(asctime)s - %(levelname)s [%(funcName)s] %(message)s')
     logger = logging.getLogger()
 
     logger.info(f'Starting py_analyser with arguments: {args}')
