@@ -190,8 +190,9 @@ class Analyser:
         # Name(id='a', ctx=Load())
         # Uninitialized variable
         if name.id not in self.variables:
+            taints = [Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns]
             logger.debug(f'L{name.lineno} Uninitialized variable {name.id}: {taints}')
-            return [Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns]
+            return taints
 
         taints = self.variables[name.id]
         for pattern in self.patterns:
