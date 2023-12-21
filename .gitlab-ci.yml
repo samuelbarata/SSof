@@ -33,7 +33,7 @@ Specification Slices:
         echo "Patterns: $patterns_file"
         echo "Expected Output: $expected_output_file"
         cp $SLICES_FOLDER/${expected_output_file} $EXPECTED_OUTPUT_FOLDER/${expected_output_file}
-        python3 $TOOL_NAME "$SLICES_FOLDER/${slice_file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $LOGS_FOLDER/$log_file --output-folder $OUTPUT_FOLDER || exit 0
+        python3 $TOOL_NAME "$SLICES_FOLDER/${slice_file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $LOGS_FOLDER/$log_file --output-folder $OUTPUT_FOLDER || true
       done
   artifacts:
     paths:
