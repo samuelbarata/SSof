@@ -75,7 +75,7 @@ class Pattern:
 
 
 class Taint:
-    def __init__(self, source: str, source_line: int, pattern: str, sanitizer: list[tuple[str, int]] = [], implicit: bool = False):
+    def __init__(self, source: str, source_line: int, pattern: str, sanitizer: list[tuple[str, int]] = list(), implicit: bool = False):
         self.source = source
         self.source_line = source_line
         self.implicit = implicit
@@ -83,7 +83,11 @@ class Taint:
         self.sanitizer = sanitizer
 
     def add_sanitizer(self, sanitizer: str, line: int):
-        self.sanitizer.append((sanitizer, line))
+        # FIXME: This line doesn not work since it magically adds a new sanitizer to all taints instead of just this one
+        # self.sanitizer.append((sanitizer, line))
+        # END
+        # The following line works, but its ugly
+        self.sanitizer = self.sanitizer + [(sanitizer, line)]
 
     def is_sanitized(self) -> bool:
         return len(self.sanitizer) > 0
@@ -183,7 +187,7 @@ class Analyser:
 
     def bin_op(self, bin_op: ast.BinOp) -> list[Taint]:
         taints = self.analyse_statement(bin_op.left) + self.analyse_statement(bin_op.right)
-        logger.debug(f'L{bin_op.lineno} {bin_op.op}: {taints}')
+        logger.debug(f'L{bin_op.lineno} {type(bin_op.op)}: {taints}')
         return taints
 
     def name(self, name: ast.Name) -> list[Taint]:
@@ -199,9 +203,8 @@ class Analyser:
             # Variable is Source
             if name.id in pattern.sources:
                 taints.append(Taint(name.id, name.lineno, pattern.vulnerability))
-                self.variables[name.id] = taints
         logger.debug(f'L{name.lineno} {name.id}: {taints}')
-        return self.variables[name.id]
+        return taints
 
     def assign(self, assignment: ast.Assign) -> list[Taint]:
         # Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=''))
@@ -255,10 +258,10 @@ class Analyser:
                         logger.info(f"Found vulnerability: {vuln.name}")
                         logger.debug(f"L{call.lineno} Vulnerability details: {vuln}")
             # Pattern Sanitizers
-            if call.func.id in pattern.sanitizers:
-                for taint in argument_taints:
-                    if taint.pattern_name == pattern.vulnerability:
-                        taint.add_sanitizer(call.func.id, call.lineno)
+            if call.func.id in pattern.sanitizers:  # esta funcão sanitiza o pattern onde estou
+                for taint in argument_taints:  # em todos os taints que chegam aos argumentos desta função
+                    if taint.pattern_name == pattern.vulnerability:  # se o taint se aplica ao pattern que estou a analisar
+                        taint.add_sanitizer(call.func.id, call.lineno)  # adiciono o sanitizer ao taint
                         logger.info(f"L{call.lineno} Sanitized taint: {taint} for pattern: {pattern.vulnerability}")
 
         taints = pattern_taints + argument_taints
