@@ -57,6 +57,22 @@ def visualizer(tree, name, folder):
     # Render the Digraph
     dot.render(name)
 
+class VariableTaints:
+    def __init__(self):
+        self.taints : list[Taint] = []
+        self.initialized = False
+        self.variables : dict[str, VariableTaints] = {}
+
+    def assign_taints(self, taints):
+        self.taints = taints
+        self.initialized = True
+
+    def get_taints(self):
+        ret = self.taints
+        for var in self.variables:
+            ret.extend(self.variables[var].get_taints())
+        return ret
+
 
 class Pattern:
     def __init__(self, object):
@@ -116,7 +132,7 @@ class Analyser:
     def __init__(self, ast, patterns):
         self.ast = ast
         self.patterns: list[Pattern] = patterns
-        self.variables: dict[str, list[Taint]] = {}
+        self.variables: dict[str, VariableTaints] = {}
         self.vulnerabilities: list[Vulnerability] = []
         logger.debug(f'Added patterns to Analyser:\n{self.patterns}')
 
@@ -178,6 +194,8 @@ class Analyser:
                 return []  # A constant is never tainted
             case ast.BinOp():
                 return self.bin_op(statement)
+            case ast.Attribute():
+                return self.attribute(statement)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
@@ -203,28 +221,94 @@ class Analyser:
         logger.debug(f'L{name.lineno} {name.id}: {taints}')
         return taints
 
+    def attribute(self, attribute, line=None) -> list[Taint]:
+        # Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())
+        taints = []
+        # FIXME: I dont like this code AT ALL!!!
+        if isinstance(attribute, list):
+            attributes_list = attribute
+            if len(attributes_list) == 0:
+                return []
+        else:
+            attributes_list = self.get_name(attribute)
+            line = attribute.lineno
+        # END FIX-ME
+
+        # Verificar a variavel
+        if attributes_list[0] not in self.variables:
+            # Criamos a variavel vazia
+            variable_taint = VariableTaints()
+            logger.debug(f'L{line} {attributes_list[0]}: didnt exist')
+        else:
+            # Guardamos a variavel para usar mais tarde
+            # TODO?: tirar o deepcopy SE não escrevermos na variavel
+            variable_taint = deepcopy(self.variables[attributes_list[0]])
+
+        if not variable_taint.initialized:
+            # Adicionamos taints de variavel nao inicializada
+            taints.extend([Taint(attributes_list[0], line, pattern.vulnerability) for pattern in self.patterns])
+            logger.debug(f'L{line} {attributes_list[0]}: was not initialized')
+        else:
+            taints.extend(variable_taint.get_taints())
+
+        # Verificar os atributos da variavel
+        for attribute_v in attributes_list[1:]:
+            if attribute_v in variable_taint.variables:
+                variable_taint = variable_taint.variables[attribute_v]
+                continue
+            else:
+                variable_taint = VariableTaints()
+                taints.extend([Taint(attribute_v, line, pattern.vulnerability) for pattern in self.patterns])
+
+        #taints = variable_taint.get_taints()
+        logger.debug(f'L{line} {attributes_list}: {taints}')
+        return taints
+
+    def get_name(self, attribute) -> list[str]:
+        if isinstance(attribute, ast.Name):
+            return [attribute.id]
+        elif isinstance(attribute, ast.Attribute):
+            return self.get_name(attribute.value) + [attribute.attr]
+        else:
+            logger.critical(f'Unknown attribute type: {attribute}')
+            raise TypeError(f'Unknown attribute type: {attribute}')
+
+
     def assign(self, assignment: ast.Assign) -> list[Taint]:
         # Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=''))
         # Assign(targets=[Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())], value=Constant(value=0))
         # TODO?: Handle multiple targets
         assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
 
-        variable_name = assignment.targets[0].id
+        # Analyse the right side of the assignment
         taints = self.analyse_statement(assignment.value)
-        self.variables[variable_name] = taints
-        logger.debug(f'L{assignment.lineno} {variable_name}: {taints}')
+        attributes_list = self.get_name(assignment.targets[0])
+
+        if attributes_list[0] not in self.variables:
+            self.variables[attributes_list[0]] = VariableTaints()
+
+        variable_taint = self.variables[attributes_list[0]]
+
+        for attribute in attributes_list[1:]:
+            if attribute not in variable_taint.variables:
+                variable_taint.variables[attribute] = VariableTaints()
+
+            variable_taint = variable_taint.variables[attribute]
+
+        variable_taint.assign_taints(taints)
+        logger.debug(f'L{assignment.lineno} {attributes_list}: {taints}')
 
         for pattern in self.patterns:
-            # Variable is Sink
-            if variable_name in pattern.sinks:
-                for taint in taints:
-                    # TODO: code duplicated in call
-                    if taint.pattern_name == pattern.vulnerability:
-                        vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), variable_name, assignment.lineno)
-                        self.vulnerabilities.append(vuln)
-                        logger.info(f"Found vulnerability: {vuln.name}")
-                        logger.debug(f"Vulnerability details: {vuln}")
-
+            for variable_name in attributes_list:
+                # Variable is Sink
+                if variable_name in pattern.sinks:
+                    for taint in taints:
+                        # TODO: code duplicated in call
+                        if taint.pattern_name == pattern.vulnerability:
+                            vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), variable_name, assignment.lineno)
+                            self.vulnerabilities.append(vuln)
+                            logger.info(f"Found vulnerability: {vuln.name}")
+                            logger.debug(f"Vulnerability details: {vuln}")
         return taints
 
     def expression(self, expression: ast.Expr) -> list[Taint]:
@@ -235,35 +319,45 @@ class Analyser:
 
     def call(self, call: ast.Call) -> list[Taint]:
         # Call(func=Name(id='c', ctx=Load()), args=[], keywords=[])
+        # Call(func=Attribute(value=Name(id='b', ctx=Load()), attr='m', ctx=Load()), args=[], keywords=[])
         argument_taints = []
         pattern_taints = []
+        attribute_taints = []
+        func_attributes = self.get_name(call.func)
+        logger.debug(f'L{call.lineno} {func_attributes}')
 
         for argument in call.args:
             argument_taints.extend(deepcopy(self.analyse_statement(argument)))
 
-        for pattern in self.patterns:
-            # Pattern Sources
-            if call.func.id in pattern.sources:
-                pattern_taints.append(Taint(call.func.id, call.lineno, pattern.vulnerability))
-            # Pattern Sinks
-            if call.func.id in pattern.sinks:
-                # TODO: code duplicated in assign
-                for taint in argument_taints:
-                    if taint.pattern_name == pattern.vulnerability:
-                        # Deepcopy to prevent future sanitizers from affecting this taint
-                        vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), call.func.id, call.lineno)
-                        self.vulnerabilities.append(vuln)
-                        logger.info(f"Found vulnerability: {vuln.name}")
-                        logger.debug(f"L{call.lineno} Vulnerability details: {vuln}")
-            # Pattern Sanitizers
-            if call.func.id in pattern.sanitizers:  # esta funcão sanitiza o pattern onde estou
-                for taint in argument_taints:  # em todos os taints que chegam aos argumentos desta função
-                    if taint.pattern_name == pattern.vulnerability:  # se o taint se aplica ao pattern que estou a analisar
-                        taint.add_sanitizer(call.func.id, call.lineno)  # adiciono o sanitizer ao taint
-                        logger.info(f"L{call.lineno} Sanitized taint: {taint} for pattern: {pattern.vulnerability}")
+        # TODO: Verificar se fica assim ou se chamamos a função analyse_statement; desta forma tem a vantagem de que já corta a 'funcao em si'
+        # FIXME: Este codigo ta actually feio do lado da função attribute... :(
+        attribute_taints.extend(self.attribute(func_attributes[:-1], call.lineno))
+        # END FIX-ME
 
-        taints = pattern_taints + argument_taints
-        logger.debug(f'L{call.lineno} {call.func.id}: {taints}')
+        for pattern in self.patterns:
+            for func_name in func_attributes:
+                # Pattern Sources
+                if func_name in pattern.sources:
+                    pattern_taints.append(Taint(func_name, call.lineno, pattern.vulnerability))
+                # Pattern Sinks
+                if func_name in pattern.sinks:
+                    # TODO: code duplicated in assign
+                    for taint in argument_taints:
+                        if taint.pattern_name == pattern.vulnerability:
+                            # Deepcopy to prevent future sanitizers from affecting this taint
+                            vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), func_name, call.lineno)
+                            self.vulnerabilities.append(vuln)
+                            logger.info(f"Found vulnerability: {vuln.name}")
+                            logger.debug(f"L{call.lineno} Vulnerability details: {vuln}")
+                # Pattern Sanitizers
+                if func_name in pattern.sanitizers:  # esta funcão sanitiza o pattern onde estou
+                    for taint in argument_taints:  # em todos os taints que chegam aos argumentos desta função
+                        if taint.pattern_name == pattern.vulnerability:  # se o taint se aplica ao pattern que estou a analisar
+                            taint.add_sanitizer(func_name, call.lineno)  # adiciono o sanitizer ao taint
+                            logger.info(f"L{call.lineno} Sanitized taint: {taint} for pattern: {pattern.vulnerability}")
+
+        taints = pattern_taints + argument_taints + attribute_taints
+        logger.debug(f'L{call.lineno} {func_name}: {taints}')
         return taints
 
 
