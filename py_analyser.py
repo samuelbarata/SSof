@@ -4,6 +4,7 @@ import argparse
 import logging
 import ast
 import os
+from copy import deepcopy
 
 LOG_LEVELS = {
     'INFO': logging.INFO,
@@ -13,12 +14,14 @@ LOG_LEVELS = {
     'CRITICAL': logging.CRITICAL,
 }
 
+
 def make_folder_exist(folder):
     """
     Creates the specified folder if it doesn't exist
     """
     if not os.path.exists(folder):
         os.makedirs(folder)
+
 
 def extract_filename_without_extension(file_path):
     """
@@ -27,6 +30,7 @@ def extract_filename_without_extension(file_path):
     filename_with_extension = os.path.basename(file_path)
     filename_without_extension, _ = os.path.splitext(filename_with_extension)
     return filename_without_extension
+
 
 def visualizer(tree, name, folder):
     """
@@ -53,6 +57,7 @@ def visualizer(tree, name, folder):
     # Render the Digraph
     dot.render(name)
 
+
 class Pattern:
     def __init__(self, object):
         self.vulnerability = object["vulnerability"]
@@ -61,66 +66,122 @@ class Pattern:
         self.sinks = object["sinks"]
         self.implicit = False if object["implicit"] == 'no' else True
         logger.debug(f'Loaded pattern:\n{self}')
+
     def __str__(self):
         return f'Vulnerability: {self.vulnerability}\nSources: {self.sources}\nSanitizers: {self.sanitizers}\nSinks: {self.sinks}\nImplicit: {self.implicit}'
+
     def __repr__(self) -> str:
         return self.__str__()
 
+
 class Taint:
-    def __init__(self, source:str, source_line:int, implicit:bool=False, sanitized:bool=False):
+    def __init__(self, source: str, source_line: int, implicit: bool = False, sanitized: bool = False):
         self.source = source
         self.source_line = source_line
         self.implicit = implicit
         self.sanitized = sanitized
+
+    def __repr__(self) -> str:
+        return f"Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.sanitized}"
+
+class Vulnerability:
+    def __init__(self, name: str, taint: Taint, sink: str, sink_line: int):
+        self.name = name
+        self.taint = taint
+        self.sink = sink
+        self.sink_line = sink_line
+
+    def to_dict(self) -> dict:
+        return {'vulnerability': self.name, 'source': [self.taint.source, self.taint.source_line], 'sink': [self.sink, self.sink_line], 'unsanitized_flows': 'no' if self.taint.sanitized else 'yes', 'sanitized_flows': []}
+
+    def __repr__(self) -> str:
+        return f"Name: {self.name}, Sink: {self.sink}, Sink Line: {self.sink_line}, Taint: {self.taint}"
 
 
 class Analyser:
     def __init__(self, ast, patterns):
         self.ast = ast
         self.patterns: list[Pattern] = patterns
+        self.variables: dict[str, list[Taint]] = {}
+        self.vulnerabilities: list[Vulnerability] = []
         logger.debug(f'Added patterns to Analyser:\n{self.patterns}')
 
     def export_results(self) -> str:
-        return json.dumps(['none'])
         if len(self.vulnerabilities) == 0:
             return json.dumps(['none'])
-        else:
-            return json.dumps([str(vulnerability) for vulnerability in self.vulnerabilities])
+        return json.dumps([vuln.to_dict() for vuln in self.vulnerabilities], indent=4)
 
     def analyse(self):
         for statement in self.ast.body:
             self.analyse_statement(statement)
 
-    def analyse_statement(self, statement) -> list(Taint):
+    def analyse_statement(self, statement) -> list[Taint]:
         match statement:
+            case ast.Name():
+                # 'Calling' a variable will allways return the taints associated with it
+                return self.variables[statement.id]
             case ast.Assign():
                 return self.assign(statement)
             case ast.Expr():
                 return self.expression(statement)
             case ast.Call():
                 return self.call(statement)
+            case ast.Constant():
+                return [] # A constant is never tainted
+
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
 
-    def assign(self, assignment: ast.Assign) -> list(Taint):
+    def assign(self, assignment: ast.Assign) -> list[Taint]:
         # Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=''))
+        # TODO?: Handle multiple targets
+        # FIXME: REMOVE THIS LATER
+        assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
+        # END FIX-ME
+        variable_name = assignment.targets[0].id
+        taint = self.analyse_statement(assignment.value)
+        self.variables[variable_name] = taint
+        logger.debug(f'Assigning {taint} to {variable_name}')
 
-        pass
+        return taint
 
-    def expression(self, expression: ast.Expr) -> list(Taint):
+    def expression(self, expression: ast.Expr) -> list[Taint]:
         # Expr(value=Call(func=Name(id='e', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[]))
+        return self.analyse_statement(expression.value)
 
-        pass
 
-    def call(self, call: ast.Call) -> list(Taint):
+    def call(self, call: ast.Call) -> list[Taint]:
         # Call(func=Name(id='c', ctx=Load()), args=[], keywords=[])
-        ret = []
+        argument_taints = []
+        pattern_taints = []
+
+        for argument in call.args:
+            argument_taints.extend(self.analyse_statement(argument))
+
         for pattern in self.patterns:
+            # Pattern Sources
             if call.func.id in pattern.sources:
+                pattern_taints.append(Taint(call.func.id, call.lineno))
+            # Pattern Sinks
+            if call.func.id in pattern.sinks:
+                for taint in argument_taints:
+                    if taint.source in pattern.sources:
+                        # Deepcopy to prevent future sanitizers from affecting this taint
+                        vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), call.func.id, call.lineno)
+                        self.vulnerabilities.append(vuln)
+                        logger.info(f"Found vulnerability: {vuln.name}")
+                        logger.debug(f"Vulnerability details: {vuln}")
+            # Pattern Sanitizers
+            if call.func.id in pattern.sanitizers:
+                # TODO: Implement me
+                pass
 
 
-        pass
+
+
+        return pattern_taints + argument_taints
+
 
 if __name__ == '__main__':
     project_root = os.path.dirname(os.path.abspath(__file__))
