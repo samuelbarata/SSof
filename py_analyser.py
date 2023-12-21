@@ -75,19 +75,16 @@ class Pattern:
 
 
 class Taint:
-    def __init__(self, source: str, source_line: int, pattern: str, sanitizer: list[tuple[str, int]] = list(), implicit: bool = False):
+    def __init__(self, source: str, source_line: int, pattern: str, implicit: bool = False):
         self.source = source
         self.source_line = source_line
         self.implicit = implicit
         self.pattern_name = pattern
-        self.sanitizer = sanitizer
+        # WARNING: this list CANNOT be a default argument because default arguemnts are only created once and then copied [or referenced] to all instances of the class
+        self.sanitizer = []
 
     def add_sanitizer(self, sanitizer: str, line: int):
-        # FIXME: This line doesn not work since it magically adds a new sanitizer to all taints instead of just this one
-        # self.sanitizer.append((sanitizer, line))
-        # END
-        # The following line works, but its ugly
-        self.sanitizer = self.sanitizer + [(sanitizer, line)]
+        self.sanitizer.append((sanitizer, line))
 
     def is_sanitized(self) -> bool:
         return len(self.sanitizer) > 0
@@ -208,6 +205,7 @@ class Analyser:
 
     def assign(self, assignment: ast.Assign) -> list[Taint]:
         # Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=''))
+        # Assign(targets=[Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())], value=Constant(value=0))
         # TODO?: Handle multiple targets
         assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
 
