@@ -42,3 +42,10 @@ There are 2 stages in this pipeline:
 - `Test`:
     - There is 1 job for each set of tests
     - Each job will load the artifacts from the previous stage and compare the outputs with the expected outputs
+
+## Development
+
+Linting
+```bash
+autopep8 py_analyser.py --experimental --ignore E501 -i
+```

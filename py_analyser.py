@@ -75,14 +75,21 @@ class Pattern:
 
 
 class Taint:
-    def __init__(self, source: str, source_line: int, implicit: bool = False, sanitized: bool = False):
+    def __init__(self, source: str, source_line: int, pattern: str, sanitizer: list[tuple[str, int]] = [], implicit: bool = False):
         self.source = source
         self.source_line = source_line
         self.implicit = implicit
-        self.sanitized = sanitized
+        self.pattern_name = pattern
+        self.sanitizer = sanitizer
+
+    def add_sanitizer(self, sanitizer: str, line: int):
+        self.sanitizer.append((sanitizer, line))
+
+    def is_sanitized(self) -> bool:
+        return len(self.sanitizer) > 0
 
     def __repr__(self) -> str:
-        return f"Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.sanitized}"
+        return f"Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.is_sanitized()}, Pattern: {self.pattern_name}"
 
 
 class Vulnerability:
@@ -92,8 +99,13 @@ class Vulnerability:
         self.sink = sink
         self.sink_line = sink_line
 
-    def to_dict(self) -> dict:
-        return {'vulnerability': self.name, 'source': [self.taint.source, self.taint.source_line], 'sink': [self.sink, self.sink_line], 'unsanitized_flows': 'no' if self.taint.sanitized else 'yes', 'sanitized_flows': []}
+    def is_same_vulnerability(self, other) -> bool:
+        return isinstance(other, Vulnerability) and \
+            self.taint.pattern_name == other.taint.pattern_name and \
+            self.taint.source == other.taint.source and \
+            self.taint.source_line == other.taint.source_line and \
+            self.sink == other.sink and \
+            self.sink_line == other.sink_line
 
     def __repr__(self) -> str:
         return f"Name: {self.name}, Sink: {self.sink}, Sink Line: {self.sink_line}, Taint: {self.taint}"
@@ -110,18 +122,40 @@ class Analyser:
     def export_results(self) -> str:
         if len(self.vulnerabilities) == 0:
             return json.dumps(['none'])
-        vulnerabilities = [vuln.to_dict() for vuln in self.vulnerabilities]
-        vuln_names: dict[str, list[int, int]] = {}  # name: [count, current]
 
-        for vuln in vulnerabilities:
-            val = vuln_names.get(vuln['vulnerability'], [0, 0])
-            val[0] += 1
-            vuln_names[vuln['vulnerability']] = val
+        groups: list[list[Vulnerability]] = []
+        for vuln in self.vulnerabilities:
+            matched = False
+            for g in groups:
+                if vuln.is_same_vulnerability(g[0]):
+                    g.append(vuln)
+                    matched = True
+                    break
+            if not matched:
+                groups.append([vuln])
 
+        vulnerabilities = []
+        for g in groups:
+            vuln_out = {'vulnerability': g[0].name,
+                        'source': [g[0].taint.source, g[0].taint.source_line],
+                        'sink': [g[0].sink, g[0].sink_line],
+                        'unsanitized_flows': 'no',
+                        'sanitized_flows': []
+                        }
+            for vuln in g:
+                if vuln.taint.is_sanitized():
+                    vuln_out['sanitized_flows'].append(list(vuln.taint.sanitizer))
+                else:
+                    vuln_out['unsanitized_flows'] = 'yes'
+            vulnerabilities.append(vuln_out)
+
+        # vulnerabilities = [vuln.to_dict() for vuln in self.vulnerabilities]
+        vuln_names: dict[str, int] = {}  # name: [count, current]
         for vuln in vulnerabilities:
-            if vuln_names[vuln['vulnerability']][0] > 1:
-                vuln_names[vuln['vulnerability']][1] += 1
-                vuln['vulnerability'] = f"{vuln['vulnerability']}_{vuln_names[vuln['vulnerability']][1]}"
+            value = vuln_names.get(vuln['vulnerability'], 0) + 1
+            vuln_names[vuln['vulnerability']] = value
+
+            vuln['vulnerability'] = f"{vuln['vulnerability']}_{value}"
 
         return json.dumps(vulnerabilities, indent=4)
 
@@ -141,18 +175,26 @@ class Analyser:
                 return self.call(statement)
             case ast.Constant():
                 return []  # A constant is never tainted
-
+            case ast.BinOp():
+                return self.bin_op(statement)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
 
+    def bin_op(self, bin_op: ast.BinOp) -> list[Taint]:
+        return self.analyse_statement(bin_op.left) + self.analyse_statement(bin_op.right)
+
     def name(self, name: ast.Name) -> list[Taint]:
         # Name(id='a', ctx=Load())
-        taints = self.variables.get(name.id, [])
+        # Uninitialized variable
+        if name.id not in self.variables:
+            return [Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns]
+
+        taints = self.variables[name.id]
         for pattern in self.patterns:
             # Variable is Source
             if name.id in pattern.sources:
-                taints.append(Taint(name.id, name.lineno, pattern.implicit))
+                taints.append(Taint(name.id, name.lineno, pattern.vulnerability))
                 self.variables[name.id] = taints
         return self.variables[name.id]
 
@@ -172,7 +214,8 @@ class Analyser:
             # Variable is Sink
             if variable_name in pattern.sinks:
                 for taint in taints:
-                    if taint.source in pattern.sources:
+                    # TODO: code duplicated in call
+                    if taint.pattern_name == pattern.vulnerability:
                         vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), variable_name, assignment.lineno)
                         self.vulnerabilities.append(vuln)
                         logger.info(f"Found vulnerability: {vuln.name}")
@@ -190,16 +233,17 @@ class Analyser:
         pattern_taints = []
 
         for argument in call.args:
-            argument_taints.extend(self.analyse_statement(argument))
+            argument_taints.extend(deepcopy(self.analyse_statement(argument)))
 
         for pattern in self.patterns:
             # Pattern Sources
             if call.func.id in pattern.sources:
-                pattern_taints.append(Taint(call.func.id, call.lineno))
+                pattern_taints.append(Taint(call.func.id, call.lineno, pattern.vulnerability))
             # Pattern Sinks
             if call.func.id in pattern.sinks:
+                # TODO: code duplicated in assign
                 for taint in argument_taints:
-                    if taint.source in pattern.sources:
+                    if taint.pattern_name == pattern.vulnerability:
                         # Deepcopy to prevent future sanitizers from affecting this taint
                         vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), call.func.id, call.lineno)
                         self.vulnerabilities.append(vuln)
@@ -207,8 +251,10 @@ class Analyser:
                         logger.debug(f"Vulnerability details: {vuln}")
             # Pattern Sanitizers
             if call.func.id in pattern.sanitizers:
-                # TODO: Implement me
-                pass
+                for taint in argument_taints:
+                    if taint.pattern_name == pattern.vulnerability:
+                        taint.add_sanitizer(call.func.id, call.lineno)
+                        logger.info(f"Sanitized taint: {taint} for pattern: {pattern.vulnerability}")
 
         return pattern_taints + argument_taints
 
