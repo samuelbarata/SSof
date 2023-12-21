@@ -84,6 +84,7 @@ class Taint:
     def __repr__(self) -> str:
         return f"Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.sanitized}"
 
+
 class Vulnerability:
     def __init__(self, name: str, taint: Taint, sink: str, sink_line: int):
         self.name = name
@@ -127,7 +128,7 @@ class Analyser:
             case ast.Call():
                 return self.call(statement)
             case ast.Constant():
-                return [] # A constant is never tainted
+                return []  # A constant is never tainted
 
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
@@ -149,7 +150,6 @@ class Analyser:
     def expression(self, expression: ast.Expr) -> list[Taint]:
         # Expr(value=Call(func=Name(id='e', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[]))
         return self.analyse_statement(expression.value)
-
 
     def call(self, call: ast.Call) -> list[Taint]:
         # Call(func=Name(id='c', ctx=Load()), args=[], keywords=[])
@@ -176,9 +176,6 @@ class Analyser:
             if call.func.id in pattern.sanitizers:
                 # TODO: Implement me
                 pass
-
-
-
 
         return pattern_taints + argument_taints
 
