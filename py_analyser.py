@@ -110,7 +110,20 @@ class Analyser:
     def export_results(self) -> str:
         if len(self.vulnerabilities) == 0:
             return json.dumps(['none'])
-        return json.dumps([vuln.to_dict() for vuln in self.vulnerabilities], indent=4)
+        vulnerabilities = [vuln.to_dict() for vuln in self.vulnerabilities]
+        vuln_names: dict[str, list[int, int]] = {}  # name: [count, current]
+
+        for vuln in vulnerabilities:
+            val = vuln_names.get(vuln['vulnerability'], [0, 0])
+            val[0] += 1
+            vuln_names[vuln['vulnerability']] = val
+
+        for vuln in vulnerabilities:
+            if vuln_names[vuln['vulnerability']][0] > 1:
+                vuln_names[vuln['vulnerability']][1] += 1
+                vuln['vulnerability'] = f"{vuln['vulnerability']}_{vuln_names[vuln['vulnerability']][1]}"
+
+        return json.dumps(vulnerabilities, indent=4)
 
     def analyse(self):
         for statement in self.ast.body:
@@ -119,8 +132,7 @@ class Analyser:
     def analyse_statement(self, statement) -> list[Taint]:
         match statement:
             case ast.Name():
-                # 'Calling' a variable will allways return the taints associated with it
-                return self.variables[statement.id]
+                return self.name(statement)
             case ast.Assign():
                 return self.assign(statement)
             case ast.Expr():
@@ -134,18 +146,39 @@ class Analyser:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
 
+    def name(self, name: ast.Name) -> list[Taint]:
+        # Name(id='a', ctx=Load())
+        taints = self.variables.get(name.id, [])
+        for pattern in self.patterns:
+            # Variable is Source
+            if name.id in pattern.sources:
+                taints.append(Taint(name.id, name.lineno, pattern.implicit))
+                self.variables[name.id] = taints
+        return self.variables[name.id]
+
     def assign(self, assignment: ast.Assign) -> list[Taint]:
         # Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=''))
         # TODO?: Handle multiple targets
         # FIXME: REMOVE THIS LATER
         assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
         # END FIX-ME
-        variable_name = assignment.targets[0].id
-        taint = self.analyse_statement(assignment.value)
-        self.variables[variable_name] = taint
-        logger.debug(f'Assigning {taint} to {variable_name}')
 
-        return taint
+        variable_name = assignment.targets[0].id
+        taints = self.analyse_statement(assignment.value)
+        self.variables[variable_name] = taints
+        logger.debug(f'Assigning {taints} to {variable_name}')
+
+        for pattern in self.patterns:
+            # Variable is Sink
+            if variable_name in pattern.sinks:
+                for taint in taints:
+                    if taint.source in pattern.sources:
+                        vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), variable_name, assignment.lineno)
+                        self.vulnerabilities.append(vuln)
+                        logger.info(f"Found vulnerability: {vuln.name}")
+                        logger.debug(f"Vulnerability details: {vuln}")
+
+        return taints
 
     def expression(self, expression: ast.Expr) -> list[Taint]:
         # Expr(value=Call(func=Name(id='e', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[]))
