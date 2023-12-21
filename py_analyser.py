@@ -213,7 +213,7 @@ class Analyser:
             logger.debug(f'L{name.lineno} Uninitialized variable {name.id}: {taints}')
             return taints
 
-        taints = self.variables[name.id]
+        taints = self.variables[name.id].get_taints()
         for pattern in self.patterns:
             # Variable is Source
             if name.id in pattern.sources:
