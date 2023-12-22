@@ -8,7 +8,9 @@
 | [Samuel Barata](mailto:samuel.barata@tecnico.ulisboa.pt)     | ist194230  |
 | [Sandra Castilho](mailto:sandra.castilho@tecnico.ulisboa.pt) | ist196765  |
 
-## Running the tool
+## Tool
+
+### Running the tool
 
 To run the tool you should use the following command:
 ```sh
@@ -43,9 +45,11 @@ There are 2 stages in this pipeline:
     - There is 1 job for each set of tests
     - Each job will load the artifacts from the previous stage and compare the outputs with the expected outputs
 
+<!--
 ## Development
 
 Linting
 ```bash
 autopep8 py_analyser.py --experimental --ignore E501 -i
 ```
+-->

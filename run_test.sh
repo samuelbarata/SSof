@@ -1,6 +1,10 @@
 #!/bin/bash
 
 source ./test_env.sh
+rm -rf $LOGS_FOLDER
+rm -rf $OUTPUT_FOLDER
+rm -rf $EXPECTED_OUTPUT_FOLDER
+
 mkdir -p $LOGS_FOLDER
 mkdir -p $OUTPUT_FOLDER
 mkdir -p $EXPECTED_OUTPUT_FOLDER

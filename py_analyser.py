@@ -57,24 +57,12 @@ def visualizer(tree, name, folder):
     # Render the Digraph
     dot.render(name)
 
-class VariableTaints:
-    def __init__(self):
-        self.taints : list[Taint] = []
-        self.initialized = False
-        self.variables : dict[str, VariableTaints] = {}
-
-    def assign_taints(self, taints):
-        self.taints = taints
-        self.initialized = True
-
-    def get_taints(self):
-        ret = self.taints
-        for var in self.variables:
-            ret.extend(self.variables[var].get_taints())
-        return ret
-
 
 class Pattern:
+    """
+    Defines a pattern that the tool can look for
+    """
+
     def __init__(self, object):
         self.vulnerability = object["vulnerability"]
         self.sources = object["sources"]
@@ -91,6 +79,10 @@ class Pattern:
 
 
 class Taint:
+    """
+    Defines a taint found by the tool
+    """
+
     def __init__(self, source: str, source_line: int, pattern: str, implicit: bool = False):
         self.source = source
         self.source_line = source_line
@@ -100,6 +92,13 @@ class Taint:
         self.sanitizer = []
 
     def add_sanitizer(self, sanitizer: str, line: int):
+        """
+        Appends a sanitizer to the flow of the taint
+
+        Parameters:
+            - sanitizer (str): The name of the sanitizer function
+            - line (int): The line where the sanitizer is called
+        """
         self.sanitizer.append((sanitizer, line))
 
     def is_sanitized(self) -> bool:
@@ -109,7 +108,42 @@ class Taint:
         return f"Taint(Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.is_sanitized()}, Pattern: {self.pattern_name})"
 
 
+class VariableTaints:
+    """
+    Structure to save the taints of a variable and its attributes
+    """
+
+    def __init__(self):
+        self.taints: list[Taint] = []
+        self.initialized = False
+        self.variables: dict[str, VariableTaints] = {}
+
+    def assign_taints(self, taints):
+        """
+        Assigns the specified taints to the variable
+        Marks the variable as initialized
+
+        Parameters:
+            - taints (list[Taint]): The taints to assign to the variable
+        """
+        self.taints = taints
+        self.initialized = True
+
+    def get_taints(self) -> list[Taint]:
+        """
+        Return the taints of the variable and all the taints of its attributes
+        """
+        ret = self.taints
+        for var in self.variables:
+            ret.extend(self.variables[var].get_taints())
+        return ret
+
+
 class Vulnerability:
+    """
+    Defines a vulnerability found by the tool
+    """
+
     def __init__(self, name: str, taint: Taint, sink: str, sink_line: int):
         self.name = name
         self.taint = taint
@@ -137,6 +171,12 @@ class Analyser:
         logger.debug(f'Added patterns to Analyser:\n{self.patterns}')
 
     def export_results(self) -> str:
+        """
+        Exports the results of the analysis in the format specified by the project
+
+        Returns:
+            - str: The results of the analysis in JSON format
+        """
         if len(self.vulnerabilities) == 0:
             return json.dumps(['none'])
 
@@ -177,10 +217,22 @@ class Analyser:
         return json.dumps(vulnerabilities, indent=4)
 
     def analyse(self):
+        """
+        Iterates an AST and analyses each statement
+        """
         for statement in self.ast.body:
             self.analyse_statement(statement)
 
     def analyse_statement(self, statement) -> list[Taint]:
+        """
+        Matches a statement to the correct function to analyse it
+
+        Parameters:
+            - statement (ast.AST): The statement to analyse
+
+        Returns:
+            - list[Taint]: The taints found in the statement
+        """
         match statement:
             case ast.Name():
                 return self.name(statement)
@@ -196,16 +248,77 @@ class Analyser:
                 return self.bin_op(statement)
             case ast.Attribute():
                 return self.attribute(statement)
+            case ast.Compare():
+                return self.compare(statement)
+            case ast.If():
+                return self.if_statement(statement)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
 
+    def compare(self, compare: ast.Compare) -> list[Taint]:
+        """
+        Parameters:
+            - compare (ast.Compare): The compare statement to analyse
+
+        Returns:
+            - list[Taint]: The taints found in the left and the right side of the compare statement
+        """
+        # Compare(left=Name(id='c', ctx=Load()), ops=[Lt()], comparators=[Constant(value=3)])
+        taints = []
+        taints.extend(self.analyse_statement(compare.left))
+        for comparator in compare.comparators:
+            taints.extend(self.analyse_statement(comparator))
+        logger.debug(f'L{compare.lineno} {type(compare.ops[0])}: {taints}')
+        return taints
+
+    def if_statement(self, if_statement: ast.If) -> list[Taint]:
+
+        taints = []
+        statement_taints = self.analyse_statement(if_statement.test)
+        # We can treat the if block and the else block as entire seperate ASTs.
+        # We can create a new analyser instance for each blocks
+
+        # TODO?: Maybe find a way to diferenciate logs originating from the main Analyser and the ones instanced here?
+
+        analyser = [deepcopy(self)]
+        if_taints = [analyser[0].analyse_statement(statement) for statement in if_statement.body]
+        logger.debug(f'L{if_statement.lineno} IF: {if_taints}')
+
+        if len(if_statement.orelse) > 0:
+            analyser.append(deepcopy(self))
+            else_taints = [analyser[1].analyse_statement(statement) for statement in if_statement.orelse]
+            logger.debug(f'L{if_statement.lineno} ELSE: {else_taints}')
+
+        # TODO: Merge if_taints and else_taints
+
+        # taints = if_taints + else_taints
+        logger.debug(f'L{if_statement.lineno}: {taints}')
+        return taints
+
     def bin_op(self, bin_op: ast.BinOp) -> list[Taint]:
+        """
+        Parameters:
+            - bin_op (ast.BinOp): The binary operation to analyse
+
+        Returns:
+            - list[Taint]: The taints found in the left and the right side of the binary operation
+        """
         taints = self.analyse_statement(bin_op.left) + self.analyse_statement(bin_op.right)
         logger.debug(f'L{bin_op.lineno} {type(bin_op.op)}: {taints}')
         return taints
 
     def name(self, name: ast.Name) -> list[Taint]:
+        """
+        Returns the list of taints associated with a variable
+        if the variable is uninitialized will return a taint for each pattern
+
+        Parameters:
+            - name (ast.Name): The name to analyse
+
+        Returns:
+            - list[Taint]: The taints found in the variable
+        """
         # Name(id='a', ctx=Load())
         # Uninitialized variable
         if name.id not in self.variables:
@@ -222,13 +335,24 @@ class Analyser:
         return taints
 
     def attribute(self, attribute, line=None) -> list[Taint]:
+        """
+        Parameters:
+            - attribute (ast.Attribute): The attribute to analyse
+            - attribute (list[str]): The list attributes already splited
+            - line (int|None): The line where the attribute is present
+
+        Returns:
+            - list[Taint]: The taints found in the attribute
+        """
         # Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())
         taints = []
         # FIXME: I dont like this code AT ALL!!!
+        # List of attributes already parsed
         if isinstance(attribute, list):
             attributes_list = attribute
             if len(attributes_list) == 0:
                 return []
+        # Attributes to parse
         else:
             attributes_list = self.get_name(attribute)
             line = attribute.lineno
@@ -255,16 +379,30 @@ class Analyser:
         for attribute_v in attributes_list[1:]:
             if attribute_v in variable_taint.variables:
                 variable_taint = variable_taint.variables[attribute_v]
+                # TODO?: might cause problems later
+                if not variable_taint.initialized:
+                    taints.extend([Taint(attribute_v, line, pattern.vulnerability) for pattern in self.patterns])
+                # END TO-DO
                 continue
             else:
                 variable_taint = VariableTaints()
                 taints.extend([Taint(attribute_v, line, pattern.vulnerability) for pattern in self.patterns])
 
-        #taints = variable_taint.get_taints()
+        # taints = variable_taint.get_taints()
         logger.debug(f'L{line} {attributes_list}: {taints}')
         return taints
 
     def get_name(self, attribute) -> list[str]:
+        """
+        Parameters:
+            - attribute (ast.Attribute): The attribute to analyse
+
+        Returns:
+            - list[str]: The list of attributes names
+
+        Example:
+            a.b.c -> ['a', 'b', 'c']
+        """
         if isinstance(attribute, ast.Name):
             return [attribute.id]
         elif isinstance(attribute, ast.Attribute):
@@ -273,8 +411,14 @@ class Analyser:
             logger.critical(f'Unknown attribute type: {attribute}')
             raise TypeError(f'Unknown attribute type: {attribute}')
 
-
     def assign(self, assignment: ast.Assign) -> list[Taint]:
+        """
+        Parameters:
+            - assignment (ast.Assign): The assignment to analyse
+
+        Returns:
+            - list[Taint]: The taints transfered from the right side of the assignment to the left
+        """
         # Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=''))
         # Assign(targets=[Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())], value=Constant(value=0))
         # TODO?: Handle multiple targets
@@ -312,16 +456,34 @@ class Analyser:
         return taints
 
     def expression(self, expression: ast.Expr) -> list[Taint]:
+        """
+        Parameters:
+            - expression (ast.Expr): The expression to analyse
+
+        Returns:
+            - list[Taint]: The taints found in the expression
+        """
         # Expr(value=Call(func=Name(id='e', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[]))
         taints = self.analyse_statement(expression.value)
         logger.debug(f'L{expression.lineno}: {taints}')
         return taints
 
     def call(self, call: ast.Call) -> list[Taint]:
+        """
+        Parameters:
+            - call (ast.Call): The call to analyse
+
+        Returns:
+            - list[Taint]: The taints retured by the call
+        """
         # Call(func=Name(id='c', ctx=Load()), args=[], keywords=[])
         # Call(func=Attribute(value=Name(id='b', ctx=Load()), attr='m', ctx=Load()), args=[], keywords=[])
+
+        # Taints from the arguments
         argument_taints = []
+        # Taints matched by the pattern
         pattern_taints = []
+        # Taints inherited from the class where the function is present
         attribute_taints = []
         func_attributes = self.get_name(call.func)
         logger.debug(f'L{call.lineno} {func_attributes}')
@@ -379,7 +541,8 @@ if __name__ == '__main__':
     logging.basicConfig(filename=args.log_file, level=logging_level, format='%(asctime)s - %(levelname)s [%(funcName)s] %(message)s')
     logger = logging.getLogger()
 
-    logger.info(f'Starting py_analyser with arguments: {args}')
+    logger.info(f'Starting {parser.prog}')
+    logger.debug(f'Arguments passed to py_analyser: {args}')
 
     # Load patterns file
     logger.info('Loading patterns file')
@@ -400,9 +563,11 @@ if __name__ == '__main__':
             make_folder_exist(args.visualize_folder)
             visualizer(ast_py, name=extract_filename_without_extension(args.slice), folder=args.visualize_folder)
 
+    # Analyse slice
     analyser = Analyser(ast_py, patterns)
     analyser.analyse()
 
+    # Export results
     output_file_name = f"{args.output_folder}/{extract_filename_without_extension(args.slice)}.output.json"
     make_folder_exist(args.output_folder)
     with open(output_file_name, 'w') as f:
