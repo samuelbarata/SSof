@@ -118,6 +118,12 @@ class VariableTaints:
         self.initialized = False
         self.variables: dict[str, VariableTaints] = {}
 
+    def get_variables(self) -> list[str]:
+        """
+        Returns the list of variables that are attributes of this variable
+        """
+        return list(self.variables.keys())
+
     def assign_taints(self, taints):
         """
         Assigns the specified taints to the variable
@@ -166,7 +172,7 @@ class Analyser:
     def __init__(self, ast, patterns):
         self.ast = ast
         self.patterns: list[Pattern] = patterns
-        self.variables: dict[str, VariableTaints] = {}
+        self.variables: VariableTaints = VariableTaints()
         self.vulnerabilities: list[Vulnerability] = []
         logger.debug(f'Added patterns to Analyser:\n{self.patterns}')
 
@@ -372,12 +378,12 @@ class Analyser:
         """
         # Name(id='a', ctx=Load())
         # Uninitialized variable
-        if name.id not in self.variables:
+        if name.id not in self.variables.get_variables():
             taints = [Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns]
             logger.debug(f'L{name.lineno} Uninitialized variable {name.id}: {taints}')
             return taints
 
-        taints = self.variables[name.id].get_taints()
+        taints = self.variables.variables[name.id].get_taints()
         for pattern in self.patterns:
             # Variable is Source
             if name.id in pattern.sources:
@@ -410,14 +416,14 @@ class Analyser:
         # END FIX-ME
 
         # Verificar a variavel
-        if attributes_list[0] not in self.variables:
+        if attributes_list[0] not in self.variables.get_variables():
             # Criamos a variavel vazia
             variable_taint = VariableTaints()
             logger.debug(f'L{line} {attributes_list[0]}: didnt exist')
         else:
             # Guardamos a variavel para usar mais tarde
             # TODO?: tirar o deepcopy SE não escrevermos na variavel
-            variable_taint = deepcopy(self.variables[attributes_list[0]])
+            variable_taint = deepcopy(self.variables.variables[attributes_list[0]])
 
         if not variable_taint.initialized:
             # Adicionamos taints de variavel nao inicializada
@@ -479,10 +485,10 @@ class Analyser:
         taints = self.analyse_statement(assignment.value)
         attributes_list = self.get_name(assignment.targets[0])
 
-        if attributes_list[0] not in self.variables:
-            self.variables[attributes_list[0]] = VariableTaints()
+        if attributes_list[0] not in self.variables.get_variables():
+            self.variables.variables[attributes_list[0]] = VariableTaints()
 
-        variable_taint = self.variables[attributes_list[0]]
+        variable_taint = self.variables.variables[attributes_list[0]]
 
         for attribute in attributes_list[1:]:
             if attribute not in variable_taint.variables:
