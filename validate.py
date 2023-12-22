@@ -11,9 +11,19 @@ def compare_json(output, target):
     with open(target, 'r') as f:
         json_data2 = json.load(f)
 
-    # Convert JSON data to string and compare
-    json_data1_sorted = sorted(json_data1, key=lambda x: x['vulnerability'])
-    json_data2_sorted = sorted(json_data2, key=lambda x: x['vulnerability'])
+    if len(json_data1) != len(json_data2):
+        return False
+
+    if json_data1 == ["none"] and json_data2 == ["none"]:
+        return True
+
+
+    try:
+        # Convert JSON data to string and compare
+        json_data1_sorted = sorted(json_data1, key=lambda x: x['vulnerability'])
+        json_data2_sorted = sorted(json_data2, key=lambda x: x['vulnerability'])
+    except:
+        return False
 
     return json_data1_sorted == json_data2_sorted
 
