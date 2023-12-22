@@ -8,6 +8,32 @@ variables:
   LOG_LEVEL: DEBUG
   TOOL_NAME: py_analyser.py
 
+.slices_script: &slices_script |
+  for file in $SLICES_FOLDER/*.py; do
+    slice_file=$(basename -- "$file")
+    base_name_no_extension="${slice_file%.py}"
+    patterns_file="${base_name_no_extension}.patterns.json"
+    log_file="${base_name_no_extension}.log"
+    expected_output_file="${base_name_no_extension}.output.json"
+    echo "Slices folder: $SLICES_FOLDER"
+    echo "Slice: $slice_file"
+    echo "Patterns: $patterns_file"
+    echo "Expected Output: $expected_output_file"
+    cp $SLICES_FOLDER/${expected_output_file} $EXPECTED_OUTPUT_FOLDER/${expected_output_file}
+    python3 $TOOL_NAME "$SLICES_FOLDER/${slice_file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $LOGS_FOLDER/$log_file --output-folder $OUTPUT_FOLDER || true
+  done
+
+.test_script: &test_script |
+  errors=0
+  for file in $EXPECTED_OUTPUT_FOLDER/*.output.json; do
+    output_file=$(basename -- "$file")
+    python3 validate.py --output $OUTPUT_FOLDER/${output_file} --target $EXPECTED_OUTPUT_FOLDER/${output_file} || let "errors += 1"
+  done
+  if [ $errors -gt 0 ]; then
+    echo -e "There were $errors errors"
+    exit 1
+  fi
+
 Specification Slices:
   stage: Analyse
   before_script:
@@ -21,20 +47,7 @@ Specification Slices:
     - mkdir -p $LOGS_FOLDER
     - mkdir -p $OUTPUT_FOLDER
     - mkdir -p $EXPECTED_OUTPUT_FOLDER
-    - |
-      for file in $SLICES_FOLDER/*.py; do
-        slice_file=$(basename -- "$file")
-        base_name_no_extension="${slice_file%.py}"
-        patterns_file="${base_name_no_extension}.patterns.json"
-        log_file="${base_name_no_extension}.log"
-        expected_output_file="${base_name_no_extension}.output.json"
-        echo "Slices folder: $SLICES_FOLDER"
-        echo "Slice: $slice_file"
-        echo "Patterns: $patterns_file"
-        echo "Expected Output: $expected_output_file"
-        cp $SLICES_FOLDER/${expected_output_file} $EXPECTED_OUTPUT_FOLDER/${expected_output_file}
-        python3 $TOOL_NAME "$SLICES_FOLDER/${slice_file}" "$SLICES_FOLDER/${patterns_file}" --log-level $LOG_LEVEL --log-file $LOGS_FOLDER/$log_file --output-folder $OUTPUT_FOLDER
-      done
+    - *slices_script
   artifacts:
     paths:
       - $OUTPUT_FOLDER
@@ -51,8 +64,34 @@ Specification Slices Test:
     OUTPUT_FOLDER: output
     EXPECTED_OUTPUT_FOLDER: expected_output
   script:
-    - |
-      for file in $EXPECTED_OUTPUT_FOLDER/*.output.json; do
-        output_file=$(basename -- "$file")
-        python3 validate.py --output $OUTPUT_FOLDER/${output_file} --target $EXPECTED_OUTPUT_FOLDER/${output_file}
-      done
+    - *test_script
+
+Local Slices:
+  stage: Analyse
+  variables:
+    SLICES_FOLDER: tests
+    OUTPUT_FOLDER: output
+    EXPECTED_OUTPUT_FOLDER: expected_output
+    LOGS_FOLDER: logs
+  script:
+    - mkdir -p $LOGS_FOLDER
+    - mkdir -p $OUTPUT_FOLDER
+    - mkdir -p $EXPECTED_OUTPUT_FOLDER
+    - *slices_script
+  artifacts:
+    paths:
+      - $OUTPUT_FOLDER
+      - $LOGS_FOLDER
+      - $EXPECTED_OUTPUT_FOLDER
+    expire_in: 1 week
+
+Local Slices Test:
+  stage: Test
+  needs:
+    - job: Local Slices
+      artifacts: true
+  variables:
+    OUTPUT_FOLDER: output
+    EXPECTED_OUTPUT_FOLDER: expected_output
+  script:
+    - *test_script

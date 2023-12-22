@@ -160,7 +160,11 @@ cython_debug/
 #.idea/
 
 .DS_Store
+.vscode
 
+expected_output/*
+logs/*
 output/*
 diagrams/*
 *.log
+test_env.sh
