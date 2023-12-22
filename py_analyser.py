@@ -414,6 +414,8 @@ class Analyser:
             line = attribute.lineno
         # END FIX-ME
 
+        variable_taint = self.variables
+
         for attribute_v in attributes_list:
             if attribute_v in variable_taint.variables:
                 variable_taint = variable_taint.variables[attribute_v]
