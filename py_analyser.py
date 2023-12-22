@@ -252,9 +252,23 @@ class Analyser:
                 return self.compare(statement)
             case ast.If():
                 return self.if_statement(statement)
+            case ast.UnaryOp():
+                return self.unary_op(statement)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
+
+    def unary_op(self, unary_op: ast.UnaryOp) -> list[Taint]:
+        """
+        Parameters:
+            - unary_op (ast.UnaryOp): The unary operation to analyse
+
+        Returns:
+            - list[Taint]: The taints found in the unary operation
+        """
+        taints = self.analyse_statement(unary_op.operand)
+        logger.debug(f'L{unary_op.lineno} {type(unary_op.op)}: {taints}')
+        return taints
 
     def compare(self, compare: ast.Compare) -> list[Taint]:
         """
