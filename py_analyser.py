@@ -216,6 +216,38 @@ class Analyser:
 
         return json.dumps(vulnerabilities, indent=4)
 
+    def merge_if(self, others):
+        """
+        Merges the results of the analysis with the results of another analysis
+
+        Parameters:
+            - others list[Analyser]: Analysers to be merged
+                - others[0] -> if block
+                - ? others[1] -> else block
+        """
+        if not all([isinstance(other, Analyser) for other in others]):
+            logger.critical(f'Expected List of Analysers, got {[type(other) for other in others]}')
+            raise TypeError(f'Expected List of Analysers, got {[type(other) for other in others]}')
+        others: list[Analyser]
+
+        # Merge vulnerabilities found in the other analysis
+        for other in others:
+            self.vulnerabilities.extend(other.vulnerabilities)
+
+        # Import new variables found in the other analysis
+        if len(others) == 1: # Single if statement
+            # TODO: If a variable is defined here, there is a flow where it is not defined
+
+            pass
+        elif len(others) == 2: # If-Else statement
+            # TODO: If a variable is defined in both branches, the variable is always defined
+            # TODO: Ia a variable is defined in one of the 2 branches, there is a flow where it is not defined
+            pass
+        else: # Panic!
+            logger.critical(f'Expected 1 or 2 analysers, got {len(others)}')
+            raise ValueError(f'Expected 1 or 2 analysers, got {len(others)}')
+
+
     def analyse(self):
         """
         Iterates an AST and analyses each statement
@@ -254,6 +286,8 @@ class Analyser:
                 return self.if_statement(statement)
             case ast.UnaryOp():
                 return self.unary_op(statement)
+            case ast.Pass():
+                return []
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
@@ -295,6 +329,8 @@ class Analyser:
 
         # TODO?: Maybe find a way to diferenciate logs originating from the main Analyser and the ones instanced here?
 
+        else_taints = []
+
         analyser = [deepcopy(self)]
         if_taints = [analyser[0].analyse_statement(statement) for statement in if_statement.body]
         logger.debug(f'L{if_statement.lineno} IF: {if_taints}')
@@ -304,9 +340,9 @@ class Analyser:
             else_taints = [analyser[1].analyse_statement(statement) for statement in if_statement.orelse]
             logger.debug(f'L{if_statement.lineno} ELSE: {else_taints}')
 
-        # TODO: Merge if_taints and else_taints
+        self.merge_if(analyser)
 
-        # taints = if_taints + else_taints
+        taints = if_taints + else_taints
         logger.debug(f'L{if_statement.lineno}: {taints}')
         return taints
 
