@@ -172,6 +172,7 @@ class Analyser:
     def __init__(self, ast, patterns):
         self.ast = ast
         self.patterns: list[Pattern] = patterns
+        # Nota: não usamos dict[str, VariableTaints] porque facilita a recursividade
         self.variables: VariableTaints = VariableTaints()
         self.vulnerabilities: list[Vulnerability] = []
         logger.debug(f'Added patterns to Analyser:\n{self.patterns}')
@@ -222,7 +223,7 @@ class Analyser:
 
         return json.dumps(vulnerabilities, indent=4)
 
-    def join_variables(self, current: list[str], if_vars: list[dict[str, VariableTaints]], else_vars: list[dict[str, VariableTaints]]) -> list[dict[str, VariableTaints]]:
+    def join_variables(self, current: list[str], if_vars: VariableTaints, else_vars: VariableTaints) -> VariableTaints:
         pass
 
     def merge_if_vars(self, others):
@@ -245,11 +246,9 @@ class Analyser:
 
         # Import new variables found in the other analysis
         if len(others) == 1:  # Single if statement
-            # self.variables = self.join_variables(others[0].variables, deepcopy(self.variables))
-            pass
+            self.variables = self.join_variables([], others[0].variables, deepcopy(self.variables))
         elif len(others) == 2:  # If-Else statement
-            # self.variables = self.join_variables(others[0].variables, others[1].variables)
-            pass
+            self.variables = self.join_variables([], others[0].variables, others[1].variables)
         else:  # Panic!
             logger.critical(f'Expected 1 or 2 analysers, got {len(others)}')
             raise ValueError(f'Expected 1 or 2 analysers, got {len(others)}')
