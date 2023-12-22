@@ -225,7 +225,6 @@ class Analyser:
     def join_variables(self, current: list[str], if_vars: list[dict[str, VariableTaints]], else_vars: list[dict[str, VariableTaints]]) -> list[dict[str, VariableTaints]]:
         pass
 
-
     def merge_if_vars(self, others):
         """
         Merges the results of the analysis with the results of another analysis
@@ -245,13 +244,13 @@ class Analyser:
             self.vulnerabilities.extend(other.vulnerabilities)
 
         # Import new variables found in the other analysis
-        if len(others) == 1: # Single if statement
-            #self.variables = self.join_variables(others[0].variables, deepcopy(self.variables))
+        if len(others) == 1:  # Single if statement
+            # self.variables = self.join_variables(others[0].variables, deepcopy(self.variables))
             pass
-        elif len(others) == 2: # If-Else statement
-            #self.variables = self.join_variables(others[0].variables, others[1].variables)
+        elif len(others) == 2:  # If-Else statement
+            # self.variables = self.join_variables(others[0].variables, others[1].variables)
             pass
-        else: # Panic!
+        else:  # Panic!
             logger.critical(f'Expected 1 or 2 analysers, got {len(others)}')
             raise ValueError(f'Expected 1 or 2 analysers, got {len(others)}')
 
@@ -415,25 +414,7 @@ class Analyser:
             line = attribute.lineno
         # END FIX-ME
 
-        # Verificar a variavel
-        if attributes_list[0] not in self.variables.get_variables():
-            # Criamos a variavel vazia
-            variable_taint = VariableTaints()
-            logger.debug(f'L{line} {attributes_list[0]}: didnt exist')
-        else:
-            # Guardamos a variavel para usar mais tarde
-            # TODO?: tirar o deepcopy SE não escrevermos na variavel
-            variable_taint = deepcopy(self.variables.variables[attributes_list[0]])
-
-        if not variable_taint.initialized:
-            # Adicionamos taints de variavel nao inicializada
-            taints.extend([Taint(attributes_list[0], line, pattern.vulnerability) for pattern in self.patterns])
-            logger.debug(f'L{line} {attributes_list[0]}: was not initialized')
-        else:
-            taints.extend(variable_taint.get_taints())
-
-        # Verificar os atributos da variavel
-        for attribute_v in attributes_list[1:]:
+        for attribute_v in attributes_list:
             if attribute_v in variable_taint.variables:
                 variable_taint = variable_taint.variables[attribute_v]
                 # TODO?: might cause problems later
@@ -485,12 +466,9 @@ class Analyser:
         taints = self.analyse_statement(assignment.value)
         attributes_list = self.get_name(assignment.targets[0])
 
-        if attributes_list[0] not in self.variables.get_variables():
-            self.variables.variables[attributes_list[0]] = VariableTaints()
+        variable_taint = self.variables
 
-        variable_taint = self.variables.variables[attributes_list[0]]
-
-        for attribute in attributes_list[1:]:
+        for attribute in attributes_list:
             if attribute not in variable_taint.variables:
                 variable_taint.variables[attribute] = VariableTaints()
 
