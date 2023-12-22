@@ -216,7 +216,11 @@ class Analyser:
 
         return json.dumps(vulnerabilities, indent=4)
 
-    def merge_if(self, others):
+    def join_variables(self, current: list[str], if_vars: list[dict[str, VariableTaints]], else_vars: list[dict[str, VariableTaints]]) -> list[dict[str, VariableTaints]]:
+        pass
+
+
+    def merge_if_vars(self, others):
         """
         Merges the results of the analysis with the results of another analysis
 
@@ -236,17 +240,14 @@ class Analyser:
 
         # Import new variables found in the other analysis
         if len(others) == 1: # Single if statement
-            # TODO: If a variable is defined here, there is a flow where it is not defined
-
+            #self.variables = self.join_variables(others[0].variables, deepcopy(self.variables))
             pass
         elif len(others) == 2: # If-Else statement
-            # TODO: If a variable is defined in both branches, the variable is always defined
-            # TODO: Ia a variable is defined in one of the 2 branches, there is a flow where it is not defined
+            #self.variables = self.join_variables(others[0].variables, others[1].variables)
             pass
         else: # Panic!
             logger.critical(f'Expected 1 or 2 analysers, got {len(others)}')
             raise ValueError(f'Expected 1 or 2 analysers, got {len(others)}')
-
 
     def analyse(self):
         """
@@ -340,7 +341,7 @@ class Analyser:
             else_taints = [analyser[1].analyse_statement(statement) for statement in if_statement.orelse]
             logger.debug(f'L{if_statement.lineno} ELSE: {else_taints}')
 
-        self.merge_if(analyser)
+        self.merge_if_vars(analyser)
 
         taints = if_taints + else_taints
         logger.debug(f'L{if_statement.lineno}: {taints}')
