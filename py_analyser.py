@@ -213,8 +213,6 @@ class Analyser:
         Returns:
             - str: The results of the analysis in JSON format
         """
-        if len(self.vulnerabilities) == 0:
-            return json.dumps(['none'])
 
         groups: list[list[Vulnerability]] = []
         for vuln in self.vulnerabilities:
@@ -236,6 +234,9 @@ class Analyser:
                     break
             if not matched:
                 groups.append([vuln])
+
+        if len(groups) == 0:
+            return json.dumps(['none'])
 
         vulnerabilities = []
         for g in groups:
