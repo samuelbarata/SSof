@@ -652,6 +652,9 @@ class Analyser:
                 # Pattern Sanitizers
                 if func_name in pattern.sanitizers:  # esta funcão sanitiza o pattern onde estou
                     for taint in argument_taints:  # em todos os taints que chegam aos argumentos desta função
+                        # Implicit taints are not sanitizable
+                        if taint.implicit:
+                            continue
                         if taint.pattern_name == pattern.vulnerability:  # se o taint se aplica ao pattern que estou a analisar
                             taint.add_sanitizer(func_name, call.lineno)  # adiciono o sanitizer ao taint
                             logger.info(f"L{call.lineno} Sanitized taint: {taint} for pattern: {pattern.vulnerability}")
