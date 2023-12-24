@@ -3,6 +3,7 @@
 import json
 import argparse
 
+
 def compare_json(output, target):
     # Load and validate JSON data from files
     with open(output, 'r') as f:
@@ -17,7 +18,6 @@ def compare_json(output, target):
     if json_data1 == ["none"] and json_data2 == ["none"]:
         return True
 
-
     try:
         # Convert JSON data to string and compare
         json_data1_sorted = sorted(json_data1, key=lambda x: x['vulnerability'])
@@ -28,13 +28,12 @@ def compare_json(output, target):
     return json_data1_sorted == json_data2_sorted
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", '-o', help="Validate <output> file", default = False)
-    parser.add_argument("--target", '-t', help="Check <output> vs <target_file>", default = False)
+    parser.add_argument("--output", '-o', help="Validate <output> file", default=False)
+    parser.add_argument("--target", '-t', help="Check <output> vs <target_file>", default=False)
 
-    args=parser.parse_args()
+    args = parser.parse_args()
 
     if not (vars(args)['output'] and vars(args)['target']):
         print("Usage: python3 validate.py -o <output_file> -t <target_file>")
