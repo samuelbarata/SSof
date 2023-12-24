@@ -430,12 +430,12 @@ class Analyser:
         else_taints = []
 
         analyser = [deepcopy(self)]
-        if_taints = [analyser[0].analyse_statement(statement, implicit+statement_taints) for statement in if_statement.body]
+        if_taints = [analyser[0].analyse_statement(statement, implicit + statement_taints) for statement in if_statement.body]
         logger.debug(f'L{if_statement.lineno} IF: {if_taints}')
 
         if len(if_statement.orelse) > 0:
             analyser.append(deepcopy(self))
-            else_taints = [analyser[1].analyse_statement(statement, implicit+statement_taints) for statement in if_statement.orelse]
+            else_taints = [analyser[1].analyse_statement(statement, implicit + statement_taints) for statement in if_statement.orelse]
             logger.debug(f'L{if_statement.lineno} ELSE: {else_taints}')
 
         self.merge_if_vars(analyser)
