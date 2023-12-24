@@ -339,7 +339,7 @@ class Analyser:
         for statement in self.ast.body:
             self.analyse_statement(statement, [])
 
-    def analyse_statement(self, statement, implicit:list[Taint]) -> list[Taint]:
+    def analyse_statement(self, statement, implicit: list[Taint]) -> list[Taint]:
         """
         Matches a statement to the correct function to analyse it
 
@@ -376,7 +376,7 @@ class Analyser:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
 
-    def unary_op(self, unary_op: ast.UnaryOp, implicit:list[Taint]) -> list[Taint]:
+    def unary_op(self, unary_op: ast.UnaryOp, implicit: list[Taint]) -> list[Taint]:
         """
         Parameters:
             - unary_op (ast.UnaryOp): The unary operation to analyse
@@ -384,11 +384,11 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the unary operation
         """
-        taints = self.analyse_statement(unary_op.operand) + deepcopy(implicit)
+        taints = self.analyse_statement(unary_op.operand, implicit) + deepcopy(implicit)
         logger.debug(f'L{unary_op.lineno} {type(unary_op.op)}: {taints}')
         return taints
 
-    def compare(self, compare: ast.Compare, implicit:list[Taint]) -> list[Taint]:
+    def compare(self, compare: ast.Compare, implicit: list[Taint]) -> list[Taint]:
         """
         Parameters:
             - compare (ast.Compare): The compare statement to analyse
@@ -404,7 +404,7 @@ class Analyser:
         logger.debug(f'L{compare.lineno} {type(compare.ops[0])}: {taints}')
         return taints
 
-    def if_statement(self, if_statement: ast.If, implicit:list[Taint]) -> list[Taint]:
+    def if_statement(self, if_statement: ast.If, implicit: list[Taint]) -> list[Taint]:
 
         taints = deepcopy(implicit)
         statement_taints = self.analyse_statement(if_statement.test, implicit)
@@ -434,7 +434,7 @@ class Analyser:
         logger.debug(f'L{if_statement.lineno}: {taints}')
         return taints
 
-    def bin_op(self, bin_op: ast.BinOp, implicit:list[Taint]) -> list[Taint]:
+    def bin_op(self, bin_op: ast.BinOp, implicit: list[Taint]) -> list[Taint]:
         """
         Parameters:
             - bin_op (ast.BinOp): The binary operation to analyse
@@ -447,7 +447,7 @@ class Analyser:
         logger.debug(f'L{bin_op.lineno} {type(bin_op.op)}: {taints}')
         return taints
 
-    def name(self, name: ast.Name, implicit:list[Taint]) -> list[Taint]:
+    def name(self, name: ast.Name, implicit: list[Taint]) -> list[Taint]:
         """
         Returns the list of taints associated with a variable
         if the variable is uninitialized will return a taint for each pattern
@@ -479,7 +479,7 @@ class Analyser:
         logger.debug(f'L{name.lineno} {name.id}: {taints}')
         return taints
 
-    def attribute(self, attribute, implicit:list[Taint], line=None) -> list[Taint]:
+    def attribute(self, attribute, implicit: list[Taint], line=None) -> list[Taint]:
         """
         Parameters:
             - attribute (ast.Attribute): The attribute to analyse
@@ -540,7 +540,7 @@ class Analyser:
             logger.critical(f'Unknown attribute type: {attribute}')
             raise TypeError(f'Unknown attribute type: {attribute}')
 
-    def assign(self, assignment: ast.Assign, implicit:list[Taint]) -> list[Taint]:
+    def assign(self, assignment: ast.Assign, implicit: list[Taint]) -> list[Taint]:
         """
         Parameters:
             - assignment (ast.Assign): The assignment to analyse
@@ -582,7 +582,7 @@ class Analyser:
                             logger.debug(f"Vulnerability details: {vuln}")
         return taints
 
-    def expression(self, expression: ast.Expr, implicit:list[Taint]) -> list[Taint]:
+    def expression(self, expression: ast.Expr, implicit: list[Taint]) -> list[Taint]:
         """
         Parameters:
             - expression (ast.Expr): The expression to analyse
@@ -595,7 +595,7 @@ class Analyser:
         logger.debug(f'L{expression.lineno}: {taints}')
         return taints
 
-    def call(self, call: ast.Call, implicit:list[Taint]) -> list[Taint]:
+    def call(self, call: ast.Call, implicit: list[Taint]) -> list[Taint]:
         """
         Parameters:
             - call (ast.Call): The call to analyse
