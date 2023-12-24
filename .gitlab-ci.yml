@@ -1,6 +1,7 @@
 image: samuelbarata/ssof:latest
 
 stages:
+  - Linting
   - Analyse
   - Test
 
@@ -95,3 +96,9 @@ Local Slices Test:
     EXPECTED_OUTPUT_FOLDER: expected_output
   script:
     - *test_script
+
+Linting:
+  stage: Linting
+  allow_failure: true
+  script:
+    - autopep8 $TOOL_NAME --experimental --ignore E501 --exit-code > /dev/null || echo "You should run the linter using the command:\n$ autopep8 $TOOL_NAME --experimental --ignore E501 -i"

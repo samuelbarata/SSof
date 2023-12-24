@@ -259,9 +259,9 @@ class Analyser:
             - if_vars (VariableTaints): The variables found in the if block
             - else_vars (VariableTaints): The variables found in the else block
         """
-        variable_taint:VariableTaints = self.variables
-        if_var_taint:VariableTaints = if_vars
-        else_var_taint:VariableTaints = else_vars
+        variable_taint: VariableTaints = self.variables
+        if_var_taint: VariableTaints = if_vars
+        else_var_taint: VariableTaints = else_vars
         for var in current:
             variable_taint = variable_taint.variables[var]
             if var in if_var_taint.get_variables():
