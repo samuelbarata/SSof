@@ -218,6 +218,12 @@ class Analyser:
 
         groups: list[list[Vulnerability]] = []
         for vuln in self.vulnerabilities:
+            # Ignore implicit vulnerabilities for patterns that don't require it
+            for pattern in patterns:
+                if vuln.taint.pattern_name == pattern.vulnerability:
+                    if not pattern.implicit and vuln.taint.implicit:
+                        continue
+
             matched = False
             for g in groups:
                 if vuln.is_same_vulnerability(g[0]):
@@ -420,12 +426,12 @@ class Analyser:
         else_taints = []
 
         analyser = [deepcopy(self)]
-        if_taints = [analyser[0].analyse_statement(statement, implicit) for statement in if_statement.body]
+        if_taints = [analyser[0].analyse_statement(statement, implicit+statement_taints) for statement in if_statement.body]
         logger.debug(f'L{if_statement.lineno} IF: {if_taints}')
 
         if len(if_statement.orelse) > 0:
             analyser.append(deepcopy(self))
-            else_taints = [analyser[1].analyse_statement(statement, implicit) for statement in if_statement.orelse]
+            else_taints = [analyser[1].analyse_statement(statement, implicit+statement_taints) for statement in if_statement.orelse]
             logger.debug(f'L{if_statement.lineno} ELSE: {else_taints}')
 
         self.merge_if_vars(analyser)
@@ -555,7 +561,7 @@ class Analyser:
 
         taints = deepcopy(implicit)
         # Analyse the right side of the assignment
-        taints = self.analyse_statement(assignment.value, implicit)
+        taints.extend(self.analyse_statement(assignment.value, implicit))
         attributes_list = self.get_name(assignment.targets[0])
 
         variable_taint = self.variables
