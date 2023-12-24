@@ -11,5 +11,18 @@
         ],
         "unsanitized_flows": "yes",
         "sanitized_flows": []
+    },
+    {
+        "vulnerability": "A_2",
+        "source": [
+            "a",
+            3
+        ],
+        "sink": [
+            "sink",
+            3
+        ],
+        "unsanitized_flows": "yes",
+        "sanitized_flows": []
     }
 ]
