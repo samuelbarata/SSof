@@ -219,10 +219,14 @@ class Analyser:
         groups: list[list[Vulnerability]] = []
         for vuln in self.vulnerabilities:
             # Ignore implicit vulnerabilities for patterns that don't require it
+            skip_implicit = False
             for pattern in patterns:
                 if vuln.taint.pattern_name == pattern.vulnerability:
                     if not pattern.implicit and vuln.taint.implicit:
-                        continue
+                        skip_implicit = True
+                        break
+            if skip_implicit:
+                continue
 
             matched = False
             for g in groups:
