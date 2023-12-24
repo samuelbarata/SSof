@@ -101,4 +101,4 @@ Linting:
   stage: Linting
   allow_failure: true
   script:
-    - autopep8 $TOOL_NAME --experimental --ignore E501 --exit-code > /dev/null || (echo "You should run the linter using the command:\n$ autopep8 $TOOL_NAME --experimental --ignore E501 -i" && exit 1)
+    - autopep8 $TOOL_NAME --experimental --ignore E501 --exit-code > /dev/null || (echo -e "You should run the linter using the command:\n\$ autopep8 $TOOL_NAME --experimental --ignore E501 -i" && exit 1)

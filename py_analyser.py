@@ -337,9 +337,9 @@ class Analyser:
         Iterates an AST and analyses each statement
         """
         for statement in self.ast.body:
-            self.analyse_statement(statement)
+            self.analyse_statement(statement, [])
 
-    def analyse_statement(self, statement) -> list[Taint]:
+    def analyse_statement(self, statement, implicit:list[Taint]) -> list[Taint]:
         """
         Matches a statement to the correct function to analyse it
 
@@ -351,32 +351,32 @@ class Analyser:
         """
         match statement:
             case ast.Name():
-                return self.name(statement)
+                return self.name(statement, implicit)
             case ast.Assign():
-                return self.assign(statement)
+                return self.assign(statement, implicit)
             case ast.Expr():
-                return self.expression(statement)
+                return self.expression(statement, implicit)
             case ast.Call():
-                return self.call(statement)
+                return self.call(statement, implicit)
             case ast.Constant():
                 return []  # A constant is never tainted
             case ast.BinOp():
-                return self.bin_op(statement)
+                return self.bin_op(statement, implicit)
             case ast.Attribute():
-                return self.attribute(statement)
+                return self.attribute(statement, implicit)
             case ast.Compare():
-                return self.compare(statement)
+                return self.compare(statement, implicit)
             case ast.If():
-                return self.if_statement(statement)
+                return self.if_statement(statement, implicit)
             case ast.UnaryOp():
-                return self.unary_op(statement)
+                return self.unary_op(statement, implicit)
             case ast.Pass():
                 return []
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
 
-    def unary_op(self, unary_op: ast.UnaryOp) -> list[Taint]:
+    def unary_op(self, unary_op: ast.UnaryOp, implicit:list[Taint]) -> list[Taint]:
         """
         Parameters:
             - unary_op (ast.UnaryOp): The unary operation to analyse
@@ -384,11 +384,11 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the unary operation
         """
-        taints = self.analyse_statement(unary_op.operand)
+        taints = self.analyse_statement(unary_op.operand) + deepcopy(implicit)
         logger.debug(f'L{unary_op.lineno} {type(unary_op.op)}: {taints}')
         return taints
 
-    def compare(self, compare: ast.Compare) -> list[Taint]:
+    def compare(self, compare: ast.Compare, implicit:list[Taint]) -> list[Taint]:
         """
         Parameters:
             - compare (ast.Compare): The compare statement to analyse
@@ -397,17 +397,21 @@ class Analyser:
             - list[Taint]: The taints found in the left and the right side of the compare statement
         """
         # Compare(left=Name(id='c', ctx=Load()), ops=[Lt()], comparators=[Constant(value=3)])
-        taints = []
-        taints.extend(self.analyse_statement(compare.left))
+        taints = deepcopy(implicit)
+        taints.extend(self.analyse_statement(compare.left, implicit))
         for comparator in compare.comparators:
-            taints.extend(self.analyse_statement(comparator))
+            taints.extend(self.analyse_statement(comparator, implicit))
         logger.debug(f'L{compare.lineno} {type(compare.ops[0])}: {taints}')
         return taints
 
-    def if_statement(self, if_statement: ast.If) -> list[Taint]:
+    def if_statement(self, if_statement: ast.If, implicit:list[Taint]) -> list[Taint]:
 
-        taints = []
-        statement_taints = self.analyse_statement(if_statement.test)
+        taints = deepcopy(implicit)
+        statement_taints = self.analyse_statement(if_statement.test, implicit)
+        for taint in statement_taints:
+            taint.implicit = True
+
+        taints.extend(statement_taints)
         # We can treat the if block and the else block as entire seperate ASTs.
         # We can create a new analyser instance for each blocks
 
@@ -416,12 +420,12 @@ class Analyser:
         else_taints = []
 
         analyser = [deepcopy(self)]
-        if_taints = [analyser[0].analyse_statement(statement) for statement in if_statement.body]
+        if_taints = [analyser[0].analyse_statement(statement, implicit) for statement in if_statement.body]
         logger.debug(f'L{if_statement.lineno} IF: {if_taints}')
 
         if len(if_statement.orelse) > 0:
             analyser.append(deepcopy(self))
-            else_taints = [analyser[1].analyse_statement(statement) for statement in if_statement.orelse]
+            else_taints = [analyser[1].analyse_statement(statement, implicit) for statement in if_statement.orelse]
             logger.debug(f'L{if_statement.lineno} ELSE: {else_taints}')
 
         self.merge_if_vars(analyser)
@@ -430,7 +434,7 @@ class Analyser:
         logger.debug(f'L{if_statement.lineno}: {taints}')
         return taints
 
-    def bin_op(self, bin_op: ast.BinOp) -> list[Taint]:
+    def bin_op(self, bin_op: ast.BinOp, implicit:list[Taint]) -> list[Taint]:
         """
         Parameters:
             - bin_op (ast.BinOp): The binary operation to analyse
@@ -438,11 +442,12 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the left and the right side of the binary operation
         """
-        taints = self.analyse_statement(bin_op.left) + self.analyse_statement(bin_op.right)
+        taints = deepcopy(implicit)
+        taints.extend(self.analyse_statement(bin_op.left, implicit) + self.analyse_statement(bin_op.right, implicit))
         logger.debug(f'L{bin_op.lineno} {type(bin_op.op)}: {taints}')
         return taints
 
-    def name(self, name: ast.Name) -> list[Taint]:
+    def name(self, name: ast.Name, implicit:list[Taint]) -> list[Taint]:
         """
         Returns the list of taints associated with a variable
         if the variable is uninitialized will return a taint for each pattern
@@ -453,15 +458,16 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the variable
         """
+        taints = deepcopy(implicit)
         # Name(id='a', ctx=Load())
         # Variable was never assigned a value [Uninitialized]
         if name.id not in self.variables.get_variables():
-            taints = [Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns]
+            taints.extend([Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns])
             logger.debug(f'L{name.lineno} Uninitialized variable {name.id}: {taints}')
             return taints
 
         # Get taints from initialized variable
-        taints = self.variables.variables[name.id].get_taints()
+        taints.extend(self.variables.variables[name.id].get_taints())
         # Check if variable was not initialized in at least one flow
         if not self.variables.variables[name.id].initialized:
             taints.extend([Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns])
@@ -473,7 +479,7 @@ class Analyser:
         logger.debug(f'L{name.lineno} {name.id}: {taints}')
         return taints
 
-    def attribute(self, attribute, line=None) -> list[Taint]:
+    def attribute(self, attribute, implicit:list[Taint], line=None) -> list[Taint]:
         """
         Parameters:
             - attribute (ast.Attribute): The attribute to analyse
@@ -484,7 +490,7 @@ class Analyser:
             - list[Taint]: The taints found in the attribute
         """
         # Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())
-        taints = []
+        taints = deepcopy(implicit)
         # FIXME: I dont like this code AT ALL!!!
         # List of attributes already parsed
         if isinstance(attribute, list):
@@ -534,7 +540,7 @@ class Analyser:
             logger.critical(f'Unknown attribute type: {attribute}')
             raise TypeError(f'Unknown attribute type: {attribute}')
 
-    def assign(self, assignment: ast.Assign) -> list[Taint]:
+    def assign(self, assignment: ast.Assign, implicit:list[Taint]) -> list[Taint]:
         """
         Parameters:
             - assignment (ast.Assign): The assignment to analyse
@@ -547,8 +553,9 @@ class Analyser:
         # TODO?: Handle multiple targets
         assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
 
+        taints = deepcopy(implicit)
         # Analyse the right side of the assignment
-        taints = self.analyse_statement(assignment.value)
+        taints = self.analyse_statement(assignment.value, implicit)
         attributes_list = self.get_name(assignment.targets[0])
 
         variable_taint = self.variables
@@ -575,7 +582,7 @@ class Analyser:
                             logger.debug(f"Vulnerability details: {vuln}")
         return taints
 
-    def expression(self, expression: ast.Expr) -> list[Taint]:
+    def expression(self, expression: ast.Expr, implicit:list[Taint]) -> list[Taint]:
         """
         Parameters:
             - expression (ast.Expr): The expression to analyse
@@ -584,11 +591,11 @@ class Analyser:
             - list[Taint]: The taints found in the expression
         """
         # Expr(value=Call(func=Name(id='e', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[]))
-        taints = self.analyse_statement(expression.value)
+        taints = self.analyse_statement(expression.value, implicit)
         logger.debug(f'L{expression.lineno}: {taints}')
         return taints
 
-    def call(self, call: ast.Call) -> list[Taint]:
+    def call(self, call: ast.Call, implicit:list[Taint]) -> list[Taint]:
         """
         Parameters:
             - call (ast.Call): The call to analyse
@@ -609,11 +616,11 @@ class Analyser:
         logger.debug(f'L{call.lineno} {func_attributes}')
 
         for argument in call.args:
-            argument_taints.extend(deepcopy(self.analyse_statement(argument)))
+            argument_taints.extend(deepcopy(self.analyse_statement(argument, implicit)))
 
         # TODO: Verificar se fica assim ou se chamamos a função analyse_statement; desta forma tem a vantagem de que já corta a 'funcao em si'
         # FIXME: Este codigo ta actually feio do lado da função attribute... :(
-        attribute_taints.extend(self.attribute(func_attributes[:-1], call.lineno))
+        attribute_taints.extend(self.attribute(func_attributes[:-1], implicit, call.lineno))
         # END FIX-ME
 
         for pattern in self.patterns:
