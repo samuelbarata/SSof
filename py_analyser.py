@@ -101,8 +101,27 @@ class Taint:
         """
         self.sanitizer.append((sanitizer, line))
 
+    def merge_sanitizers(self, other):
+        """
+        Merges the sanitizers of two taints
+        """
+        if self != other:
+            logger.critical(f'Cannot merge different taints')
+            raise ValueError(f'Cannot merge different taints')
+        for sanitizer in other.sanitizer:
+            if sanitizer not in self.sanitizer:
+                # TODO: this might cause problems later because the sanitizer can be a list
+                self.sanitizer.append(deepcopy(sanitizer))
+
     def is_sanitized(self) -> bool:
         return len(self.sanitizer) > 0
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, Taint) and \
+            self.source == other.source and \
+            self.source_line == other.source_line and \
+            self.implicit == other.implicit and \
+            self.pattern_name == other.pattern_name
 
     def __repr__(self) -> str:
         return f"Taint(Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.is_sanitized()}, Pattern: {self.pattern_name})"
@@ -134,6 +153,16 @@ class VariableTaints:
         """
         self.taints = taints
         self.initialized = True
+
+    def merge_taints(self, taints: list[Taint]):
+        for new_taint in taints:
+            if new_taint in self.taints:
+                for taint in self.taints:
+                    if taint == new_taint:
+                        taint.merge_sanitizers(new_taint)
+                        break
+            else:
+                self.taints.append(deepcopy(new_taint))
 
     def get_taints(self) -> list[Taint]:
         """
@@ -224,7 +253,57 @@ class Analyser:
         return json.dumps(vulnerabilities, indent=4)
 
     def join_variables(self, current: list[str], if_vars: VariableTaints, else_vars: VariableTaints) -> VariableTaints:
-        pass
+        """
+        Parameters:
+            - current (list[str]): The current 'recursive' level
+            - if_vars (VariableTaints): The variables found in the if block
+            - else_vars (VariableTaints): The variables found in the else block
+        """
+        variable_taint:VariableTaints = self.variables
+        if_var_taint:VariableTaints = if_vars
+        else_var_taint:VariableTaints = else_vars
+        for var in current:
+            variable_taint = variable_taint.variables[var]
+            if var in if_var_taint.get_variables():
+                if_var_taint = if_var_taint.variables[var]
+            else:
+                if_var_taint = None
+            if var in else_var_taint.get_variables():
+                else_var_taint = else_var_taint.variables[var]
+            else:
+                else_var_taint = None
+
+        # List of all variables at current level
+        if_set = set(if_var_taint.get_variables()) if if_var_taint is not None else set()
+        else_set = set(else_var_taint.get_variables()) if else_var_taint is not None else set()
+        var_list = list(if_set | else_set)
+
+        for var in var_list:
+            # a new Variable was defined
+            if var not in variable_taint.get_variables():
+                # Variable was defined in both branches
+                if if_var_taint is not None and else_var_taint is not None and var in if_var_taint.get_variables() and var in else_var_taint.get_variables():
+                    variable_taint.variables[var] = deepcopy(if_var_taint.variables[var])
+                    variable_taint.variables[var].merge_taints(else_var_taint.variables[var].taints)
+                    if not (if_var_taint.variables[var].initialized and else_var_taint.variables[var].initialized):
+                        variable_taint.variables[var].initialized = False
+                # Variable was defined in a single branch
+                elif if_var_taint is not None and var in if_var_taint.get_variables():
+                    variable_taint.variables[var] = deepcopy(if_var_taint.variables[var])
+                    variable_taint.variables[var].initialized = False
+                elif else_var_taint is not None and var in else_var_taint.get_variables():
+                    variable_taint.variables[var] = deepcopy(else_var_taint.variables[var])
+                    variable_taint.variables[var].initialized = False
+                else:
+                    logger.critical(f'Variable {var} not found in any branch')
+                    raise ValueError(f'Variable {var} not found in any branch')
+
+            # The variable already existed before the if/else block
+            else:
+                variable_taint.variables[var].merge_taints(if_var_taint.variables[var].taints)
+                variable_taint.variables[var].merge_taints(else_var_taint.variables[var].taints)
+
+            self.join_variables(current + [var], if_var_taint, else_var_taint)
 
     def merge_if_vars(self, others):
         """
@@ -246,9 +325,9 @@ class Analyser:
 
         # Import new variables found in the other analysis
         if len(others) == 1:  # Single if statement
-            self.variables = self.join_variables([], others[0].variables, deepcopy(self.variables))
+            self.join_variables([], others[0].variables, deepcopy(self.variables))
         elif len(others) == 2:  # If-Else statement
-            self.variables = self.join_variables([], others[0].variables, others[1].variables)
+            self.join_variables([], others[0].variables, others[1].variables)
         else:  # Panic!
             logger.critical(f'Expected 1 or 2 analysers, got {len(others)}')
             raise ValueError(f'Expected 1 or 2 analysers, got {len(others)}')
@@ -375,17 +454,22 @@ class Analyser:
             - list[Taint]: The taints found in the variable
         """
         # Name(id='a', ctx=Load())
-        # Uninitialized variable
+        # Variable was never assigned a value [Uninitialized]
         if name.id not in self.variables.get_variables():
             taints = [Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns]
             logger.debug(f'L{name.lineno} Uninitialized variable {name.id}: {taints}')
             return taints
 
+        # Get taints from initialized variable
         taints = self.variables.variables[name.id].get_taints()
+        # Check if variable was not initialized in at least one flow
+        if not self.variables.variables[name.id].initialized:
+            taints.extend([Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns])
+        # Check if variable is source
         for pattern in self.patterns:
-            # Variable is Source
             if name.id in pattern.sources:
                 taints.append(Taint(name.id, name.lineno, pattern.vulnerability))
+
         logger.debug(f'L{name.lineno} {name.id}: {taints}')
         return taints
 
