@@ -253,14 +253,6 @@ class Analyser:
                     vuln_out['unsanitized_flows'] = 'yes'
             vulnerabilities.append(vuln_out)
 
-        # vulnerabilities = [vuln.to_dict() for vuln in self.vulnerabilities]
-        vuln_names: dict[str, int] = {}  # name: [count, current]
-        for vuln in vulnerabilities:
-            value = vuln_names.get(vuln['vulnerability'], 0) + 1
-            vuln_names[vuln['vulnerability']] = value
-
-            vuln['vulnerability'] = f"{vuln['vulnerability']}_{value}"
-
         return json.dumps(vulnerabilities, indent=4)
 
     def join_variables(self, current: list[str], if_vars: VariableTaints, else_vars: VariableTaints) -> VariableTaints:
