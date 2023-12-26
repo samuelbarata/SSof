@@ -19,43 +19,14 @@ def make_folder_exist(folder):
     """
     Creates the specified folder if it doesn't exist
     """
-    if not os.path.exists(folder):
-        os.makedirs(folder)
+    os.makedirs(folder, exist_ok=True)
 
 
 def extract_filename_without_extension(file_path):
     """
     Returns the filename without the path and extension
     """
-    filename_with_extension = os.path.basename(file_path)
-    filename_without_extension, _ = os.path.splitext(filename_with_extension)
-    return filename_without_extension
-
-
-def visualizer(tree, name, folder):
-    """
-    Generate a png diagram of the AST
-
-    The Diagram will be saved in the specified folder with the specified name
-
-    Code adapted from: https://earthly.dev/blog/python-ast/
-    """
-    from graphviz import Digraph
-    # Create a Graphviz Digraph object
-    dot = Digraph(format='png', directory=folder)
-
-    # Define a function to recursively add nodes to the Digraph
-    def add_node(node, parent=None):
-        node_name = str(node.__class__.__name__)
-        dot.node(str(id(node)), node_name)
-        if parent:
-            dot.edge(str(id(parent)), str(id(node)))
-        for child in ast.iter_child_nodes(node):
-            add_node(child, node)
-    # Add nodes to the Digraph
-    add_node(tree)
-    # Render the Digraph
-    dot.render(name)
+    return os.path.splitext(os.path.basename(file_path))[0]
 
 
 class Pattern:
@@ -88,7 +59,6 @@ class Taint:
         self.source_line = source_line
         self.implicit = implicit
         self.pattern_name = pattern
-        # WARNING: this list CANNOT be a default argument because default arguemnts are only created once and then copied [or referenced] to all instances of the class
         self.sanitizer = []
 
     def add_sanitizer(self, sanitizer: str, line: int):
@@ -574,15 +544,9 @@ class Analyser:
 
         for pattern in self.patterns:
             for variable_name in attributes_list:
-                # Variable is Sink
-                if variable_name in pattern.sinks:
-                    for taint in taints:
-                        # TODO: code duplicated in call
-                        if taint.pattern_name == pattern.vulnerability:
-                            vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), variable_name, assignment.lineno)
-                            self.vulnerabilities.append(vuln)
-                            logger.info(f"Found vulnerability: {vuln.name}")
-                            logger.debug(f"Vulnerability details: {vuln}")
+                # Pattern Sinks
+                self.match_sink(taints, pattern, variable_name, assignment.lineno)
+
         return taints
 
     def expression(self, expression: ast.Expr, implicit: list[Taint]) -> list[Taint]:
@@ -632,15 +596,7 @@ class Analyser:
                 if func_name in pattern.sources:
                     pattern_taints.append(Taint(func_name, call.lineno, pattern.vulnerability))
                 # Pattern Sinks
-                if func_name in pattern.sinks:
-                    # TODO: code duplicated in assign
-                    for taint in argument_taints:
-                        if taint.pattern_name == pattern.vulnerability:
-                            # Deepcopy to prevent future sanitizers from affecting this taint
-                            vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), func_name, call.lineno)
-                            self.vulnerabilities.append(vuln)
-                            logger.info(f"Found vulnerability: {vuln.name}")
-                            logger.debug(f"L{call.lineno} Vulnerability details: {vuln}")
+                self.match_sink(argument_taints, pattern, func_name, call.lineno)
                 # Pattern Sanitizers
                 if func_name in pattern.sanitizers:  # esta funcão sanitiza o pattern onde estou
                     for taint in argument_taints:  # em todos os taints que chegam aos argumentos desta função
@@ -655,6 +611,16 @@ class Analyser:
         logger.debug(f'L{call.lineno} {func_name}: {taints}')
         return taints
 
+    def match_sink(self, taints: list[Taint], pattern, name, lineno):
+        if name in pattern.sinks:
+            for taint in taints:
+                if taint.pattern_name == pattern.vulnerability:
+                    # Deepcopy to prevent future sanitizers from affecting this taint
+                    vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), name, lineno)
+                    self.vulnerabilities.append(vuln)
+                    logger.info(f"Found vulnerability: {vuln.name}")
+                    logger.debug(f"L{lineno} Vulnerability details: {vuln}")
+
 
 if __name__ == '__main__':
     project_root = os.path.dirname(os.path.abspath(__file__))
@@ -665,8 +631,6 @@ if __name__ == '__main__':
     parser.add_argument('--log-level', default='INFO', help='log level', choices=['INFO', 'DEBUG', 'WARNING', 'ERROR', 'CRITICAL'])
     parser.add_argument('--log-file', default=f"{project_root}/analyser.log", help='log file location', type=str)
     parser.add_argument('--output-folder', default=f"{project_root}/output", help='output folder location', type=str)
-    parser.add_argument('--visualize', help='Generate a png diagram of the AST', action='store_true')
-    parser.add_argument('--visualize-folder', default=f"{project_root}/diagrams", help='AST diagrams folder location', type=str)
     args = parser.parse_args()
 
     # Setup logging
@@ -691,10 +655,6 @@ if __name__ == '__main__':
     with open(args.slice, 'r') as f:
         ast_py = ast.parse(f.read())
         logger.debug(ast.dump(ast_py))
-        if args.visualize:
-            logger.debug('Generating AST Diagram')
-            make_folder_exist(args.visualize_folder)
-            visualizer(ast_py, name=extract_filename_without_extension(args.slice), folder=args.visualize_folder)
 
     # Analyse slice
     analyser = Analyser(ast_py, patterns)

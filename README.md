@@ -14,17 +14,12 @@
 
 To run the tool you should use the following command:
 ```sh
-python3 py_analyser.py <slice>.py <pattern>.json
+python3 py_analyser.py <slice.py> <pattern.json>
 ```
 
 To run the tool in debug mode append the `--log-level DEBUG` flag:
 ```bash
-python3 py_analyser.py <slice>.py <pattern>.json --log-level DEBUG
-```
-
-To generate graphical visualization of the AST append the flag `--visualize`:
-```bash
-python3 py_analyser.py <slice>.py <pattern>.json --visualize
+python3 py_analyser.py <slice.py> <pattern.json> --log-level DEBUG
 ```
 
 For more information about the tool run:
