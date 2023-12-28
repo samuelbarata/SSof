@@ -534,7 +534,7 @@ class Analyser:
         variable_taint = self.variables
 
         for attribute in attributes_list:
-            if attribute not in variable_taint.variables: # initialized variable
+            if attribute not in variable_taint.variables:
                 variable_taint.variables[attribute] = VariableTaints()
 
             variable_taint = variable_taint.variables[attribute]
@@ -665,13 +665,3 @@ if __name__ == '__main__':
     make_folder_exist(args.output_folder)
     with open(output_file_name, 'w') as f:
         f.write(analyser.export_results())
-
-
-a = f
-g(a)
-
-g: sink
-a: source
-s: sanitizer
-
-g = s(a)
