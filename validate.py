@@ -150,7 +150,7 @@ def is_vulnerability_in_target(vulnerability, target_list):
 
 
 ### Check if all patterns in filename are valid patterns
-def validate_patterns_file(filename: str) -> bool:
+def validate_patterns_file(filename: str, silent) -> bool:
     with open(filename, 'r') as f:
         patterns_list = json.loads(f.read())
     assert isinstance(patterns_list, list)
@@ -159,14 +159,16 @@ def validate_patterns_file(filename: str) -> bool:
         try:
             assert is_pattern(json_obj)
         except Exception as e:
-            print(f"\n{bcolors.RED}[-] Incorrect Pattern in file {filename}:\n{e}\n{json_obj}{bcolors.ENDC}\n")
+            if not silent:
+                print(f"\n{bcolors.RED}[-] Incorrect Pattern in file {filename}:\n{e}\n{json_obj}{bcolors.ENDC}\n")
             exit(1)
 
-    print(f"{bcolors.GREEN}[+] All patterns of file {filename} are well defined{bcolors.ENDC}")
+    if not silent:
+        print(f"{bcolors.GREEN}[+] All patterns of file {filename} are well defined{bcolors.ENDC}")
 
 
 ### Check if all outputs in filename are valid vulnerability outputs
-def validate_output_file(filename: str):
+def validate_output_file(filename: str, silent):
     with open(filename, 'r') as f:
         output_list = json.loads(f.read())
     assert isinstance(output_list, list)
@@ -178,12 +180,12 @@ def validate_output_file(filename: str):
             except Exception as e:
                 print(f"\n{bcolors.RED}[-] Incorrect Output in file {filename}:\n{e}\n{json_obj}{bcolors.ENDC}\n")
                 exit(1)
-
-    print(f"{bcolors.GREEN}[+] All outputs of file {filename} are well defined{bcolors.ENDC}")
+    if not silent:
+        print(f"{bcolors.GREEN}[+] All outputs of file {filename} are well defined{bcolors.ENDC}")
 
 
 ### Check if output in obtained file is the same as in target file
-def check_output(obtained, target):
+def check_output(obtained, target, silent):
     good = []
     missing = []
 
@@ -194,7 +196,7 @@ def check_output(obtained, target):
         target_list = json.loads(f.read())
 
     if output_list == ["none"] and target_list == ["none"]:
-        return
+        return True
 
     if output_list == ["none"] and target_list != ["none"]:
         for v in target_list:
@@ -206,25 +208,34 @@ def check_output(obtained, target):
                 good.append(output)
             else:
                 missing.append(output)
+    if not silent:
+        print(f"\nGOOD FLOWS\n{good}")
+        print(f"{bcolors.RED}\nMISSING FLOWS\n{missing}{bcolors.ENDC}")
+        print(f"{bcolors.YELLOW}\nWRONG FLOWS\n{target_list}{bcolors.ENDC}")
 
-    print(f"\nGOOD FLOWS\n{good}")
-    print(f"{bcolors.RED}\nMISSING FLOWS\n{missing}{bcolors.ENDC}")
-    print(f"{bcolors.YELLOW}\nWRONG FLOWS\n{target_list}{bcolors.ENDC}")
-
-
+    return len(missing) == 0 and len(target_list) == 0
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--pattern", '-p', help="Validate <pattern> file", default = False)
 parser.add_argument("--output", '-o', help="Validate <output> file", default = False)
 parser.add_argument("--target", '-t', help="Check <output> vs <target_file>", default = False)
+parser.add_argument("--silent", '-s', help="silent output", action='store_true', default = False)
 
 args=parser.parse_args()
 
-print("\n" + "*"*80)
+silent = vars(args)['silent']
+
+if not silent:
+    print("\n" + "*"*80)
 if vars(args)['pattern']:
-    validate_patterns_file(vars(args)['pattern'])
+    validate_patterns_file(vars(args)['pattern'], silent)
 if vars(args)['output']:
-    validate_output_file(vars(args)['output'])
+    validate_output_file(vars(args)['output'], silent)
 if vars(args)['output'] and vars(args)['target']:
-    validate_output_file(vars(args)['target'])
-    check_output(vars(args)['output'], vars(args)['target'])
+    validate_output_file(vars(args)['target'], silent)
+    if check_output(vars(args)['output'], vars(args)['target'], silent):
+        print(f"{bcolors.GREEN}[+] Output is   correct for {vars(args)['output']}{bcolors.ENDC}")
+        exit(0)
+    else:
+        print(f"{bcolors.RED}[-] Output is incorrect for {vars(args)['output']}{bcolors.ENDC}")
+        exit(1)
