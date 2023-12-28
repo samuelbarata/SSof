@@ -171,12 +171,13 @@ def validate_output_file(filename: str):
         output_list = json.loads(f.read())
     assert isinstance(output_list, list)
 
-    for json_obj in output_list:
-        try:
-            assert is_vulnerability(json_obj)
-        except Exception as e:
-            print(f"\n{bcolors.RED}[-] Incorrect Output in file {filename}:\n{e}\n{json_obj}{bcolors.ENDC}\n")
-            exit(1)
+    if output_list[0] != 'none':
+        for json_obj in output_list:
+            try:
+                assert is_vulnerability(json_obj)
+            except Exception as e:
+                print(f"\n{bcolors.RED}[-] Incorrect Output in file {filename}:\n{e}\n{json_obj}{bcolors.ENDC}\n")
+                exit(1)
 
     print(f"{bcolors.GREEN}[+] All outputs of file {filename} are well defined{bcolors.ENDC}")
 
@@ -192,16 +193,23 @@ def check_output(obtained, target):
     with open(target, 'r') as f:
         target_list = json.loads(f.read())
 
-    for output in output_list:
-        res, target_list = is_vulnerability_in_target(output, target_list)
-        if res:
-            good.append(output)
-        else:
-            missing.append(output)
+    if output_list == ["none"] and target_list == ["none"]:
+        return
+
+    if output_list == ["none"] and target_list != ["none"]:
+        for v in target_list:
+            missing.append(v)
+    else:
+        for output in output_list:
+            res, target_list = is_vulnerability_in_target(output, target_list)
+            if res:
+                good.append(output)
+            else:
+                missing.append(output)
 
     print(f"\nGOOD FLOWS\n{good}")
-    print(f"\n{bcolors.RED}\nMISSING FLOWS\n{missing}{bcolors.ENDC}")
-    print(f"\n{bcolors.YELLOW}\nWRONG FLOWS\n{target_list}{bcolors.ENDC}")
+    print(f"{bcolors.RED}\nMISSING FLOWS\n{missing}{bcolors.ENDC}")
+    print(f"{bcolors.YELLOW}\nWRONG FLOWS\n{target_list}{bcolors.ENDC}")
 
 
 
