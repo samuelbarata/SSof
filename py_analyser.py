@@ -410,6 +410,7 @@ class Analyser:
         return taints
     
     def while_statement(self, while_statement: ast.While, implicit: list[Taint]) -> list[Taint]:
+        # While(test=Compare(...), body=[...], type_ignores=[])
 
         taints = deepcopy(implicit)
         statement_taints = self.analyse_statement(while_statement.test, implicit)
