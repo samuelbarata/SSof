@@ -534,7 +534,7 @@ class Analyser:
         variable_taint = self.variables
 
         for attribute in attributes_list:
-            if attribute not in variable_taint.variables:
+            if attribute not in variable_taint.variables:  # uninitialized variable
                 variable_taint.variables[attribute] = VariableTaints()
 
             variable_taint = variable_taint.variables[attribute]
