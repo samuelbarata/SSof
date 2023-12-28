@@ -28,7 +28,7 @@ done
 errors=0
 for file in $EXPECTED_OUTPUT_FOLDER/*.output.json; do
 	output_file=$(basename -- "$file")
-	python3 validate.py --output $OUTPUT_FOLDER/${output_file} --target $EXPECTED_OUTPUT_FOLDER/${output_file} 2> /dev/null || let "errors += 1"
+	python3 validate.py --output $OUTPUT_FOLDER/${output_file} --target $EXPECTED_OUTPUT_FOLDER/${output_file} $SILENT 2> /dev/null || let "errors += 1"
 done
 if [ $errors -gt 0 ]; then
 	echo -e "There were $errors errors"
