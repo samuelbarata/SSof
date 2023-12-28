@@ -196,7 +196,7 @@ def check_output(obtained, target, silent):
         target_list = json.loads(f.read())
 
     if output_list == ["none"] and target_list == ["none"]:
-        return
+        return True
 
     if output_list == ["none"] and target_list != ["none"]:
         for v in target_list:
