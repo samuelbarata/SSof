@@ -345,6 +345,8 @@ class Analyser:
                 return self.unary_op(statement, implicit)
             case ast.Pass():
                 return []
+            case ast.While():
+                return self.while_statement(statement, implicit)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
@@ -406,6 +408,32 @@ class Analyser:
         taints = if_taints + else_taints
         logger.debug(f'L{if_statement.lineno}: {taints}')
         return taints
+    
+    def while_statement(self, while_statement: ast.While, implicit: list[Taint]) -> list[Taint]:
+
+        taints = deepcopy(implicit)
+        statement_taints = self.analyse_statement(while_statement.test, implicit)
+        for taint in statement_taints:
+            taint.implicit = True
+
+        taints.extend(statement_taints)
+        # We can treat the while as an if block with an empty else
+
+        # TODO?: Maybe find a way to diferenciate logs originating from the main Analyser and the ones instanced here?
+
+        taints = []
+
+        analyser = [deepcopy(self)]
+        # TODO while: repeat the following line:
+        for i in range(5):
+            taints.extend([analyser[0].analyse_statement(statement, implicit + statement_taints) for statement in while_statement.body])
+        logger.debug(f'L{while_statement.lineno} WHILE: {taints}')
+
+        self.merge_if_vars(analyser) # TODO while: adapt merge from if to while
+
+        logger.debug(f'L{while_statement.lineno}: {taints}')
+        return taints
+
 
     def bin_op(self, bin_op: ast.BinOp, implicit: list[Taint]) -> list[Taint]:
         """
