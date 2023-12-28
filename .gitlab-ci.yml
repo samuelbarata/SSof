@@ -132,6 +132,7 @@ Common Slices:
           fi
         done
       done
+      cd ..
   script:
     - mkdir -p $LOGS_FOLDER
     - mkdir -p $OUTPUT_FOLDER
