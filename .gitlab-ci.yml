@@ -28,7 +28,7 @@ variables:
   errors=0
   for file in $EXPECTED_OUTPUT_FOLDER/*.output.json; do
     output_file=$(basename -- "$file")
-    python3 validate.py --output $OUTPUT_FOLDER/${output_file} --target $EXPECTED_OUTPUT_FOLDER/${output_file} || let "errors += 1"
+    python3 validate.py --output $OUTPUT_FOLDER/${output_file} --target $EXPECTED_OUTPUT_FOLDER/${output_file} --silent || let "errors += 1"
   done
   if [ $errors -gt 0 ]; then
     echo -e "There were $errors errors"
@@ -90,6 +90,65 @@ Local Slices Test:
   stage: Test
   needs:
     - job: Local Slices
+      artifacts: true
+  variables:
+    OUTPUT_FOLDER: output
+    EXPECTED_OUTPUT_FOLDER: expected_output
+  script:
+    - *test_script
+
+Common Slices:
+  stage: Analyse
+  variables:
+    SLICES_FOLDER: common-tests/tests
+    OUTPUT_FOLDER: output
+    EXPECTED_OUTPUT_FOLDER: expected_output
+    LOGS_FOLDER: logs
+  before_script:
+    - git clone https://gitlab-ci-token:${GITLAB_TOKEN}@${CI_SERVER_HOST}/ssof2324/project/common-tests
+    - mkdir -p $SLICES_FOLDER
+    - |
+      cd common-tests/
+      for folder in */; do
+        folder_name=$(basename "$folder")
+
+        # Skip destination folder
+        if [ "$folder_name" == "tests" ]; then
+          continue
+        fi
+
+        # Loop through each file in the current folder
+        for file in "$folder"/*; do
+          if [ -f "$file" ]; then
+            file_name=$(basename "$file")
+
+            # Construct the new file name by prepending the folder name
+            new_file_name="${folder_name}_${file_name}"
+
+            # Copy the file to the tests directory with the new name
+            cp "$file" "./tests/$new_file_name"
+
+            echo "Copied: $file to ./tests/$new_file_name"
+          fi
+        done
+      done
+      cd ..
+  script:
+    - mkdir -p $LOGS_FOLDER
+    - mkdir -p $OUTPUT_FOLDER
+    - mkdir -p $EXPECTED_OUTPUT_FOLDER
+    - *slices_script
+  artifacts:
+    paths:
+      - $OUTPUT_FOLDER
+      - $LOGS_FOLDER
+      - $EXPECTED_OUTPUT_FOLDER
+    expire_in: 1 week
+
+Common Slices Test:
+  stage: Test
+  needs:
+    - job: Common Slices
       artifacts: true
   variables:
     OUTPUT_FOLDER: output
