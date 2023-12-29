@@ -452,46 +452,36 @@ class Analyser:
         logger.debug(f'L{name.lineno} {name.id}: {taints}')
         return taints
 
-    def attribute(self, attribute, implicit: list[Taint], line=None) -> list[Taint]:
+    def attribute(self, attribute: ast.Attribute, implicit: list[Taint]) -> list[Taint]:
         """
         Parameters:
             - attribute (ast.Attribute): The attribute to analyse
-            - attribute (list[str]): The list attributes already splited
-            - line (int|None): The line where the attribute is present
 
         Returns:
             - list[Taint]: The taints found in the attribute
         """
         # Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())
         taints = deepcopy(implicit)
-        # FIXME: I dont like this code AT ALL!!!
-        # List of attributes already parsed
-        if isinstance(attribute, list):
-            attributes_list = attribute
-            if len(attributes_list) == 0:
-                return []
-        # Attributes to parse
-        else:
-            attributes_list = self.get_name(attribute)
-            line = attribute.lineno
-        # END FIX-ME
 
+        taints.extend(self.analyse_statement(attribute.value, implicit))
+        for pattern in self.patterns:
+            # check if attribute is source
+            if attribute.attr in pattern.sources:
+                taints.append(Taint(attribute.attr, attribute.lineno, pattern.vulnerability))
+
+        attributes_list = self.get_name(attribute)
         variable_taint = self.variables
-
         for attribute_v in attributes_list:
             if attribute_v in variable_taint.variables:
                 variable_taint = variable_taint.variables[attribute_v]
-                # TODO?: might cause problems later
-                if not variable_taint.initialized:
-                    taints.extend([Taint(attribute_v, line, pattern.vulnerability) for pattern in self.patterns])
-                # END TO-DO
-                continue
             else:
                 variable_taint = VariableTaints()
-                taints.extend([Taint(attribute_v, line, pattern.vulnerability) for pattern in self.patterns])
 
-        # taints = variable_taint.get_taints()
-        logger.debug(f'L{line} {attributes_list}: {taints}')
+        taints.extend(deepcopy(variable_taint.taints))
+        if not variable_taint.initialized:
+            taints.extend([Taint(attribute.attr, attribute.lineno, pattern.vulnerability) for pattern in self.patterns])
+
+        logger.debug(f'L{attribute.lineno} {attributes_list}: {taints}')
         return taints
 
     def get_name(self, attribute) -> list[str]:
@@ -585,10 +575,8 @@ class Analyser:
         for argument in call.args:
             argument_taints.extend(deepcopy(self.analyse_statement(argument, implicit)))
 
-        # TODO: Verificar se fica assim ou se chamamos a função analyse_statement; desta forma tem a vantagem de que já corta a 'funcao em si'
-        # FIXME: Este codigo ta actually feio do lado da função attribute... :(
-        attribute_taints.extend(self.attribute(func_attributes[:-1], implicit, call.lineno))
-        # END FIX-ME
+        if isinstance(call.func, ast.Attribute):
+            attribute_taints.extend(self.analyse_statement(call.func.value, implicit))
 
         for pattern in self.patterns:
             for func_name in func_attributes:
