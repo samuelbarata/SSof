@@ -312,8 +312,7 @@ class Analyser:
         if_implicit_block = ImplicitBlock(statements=if_statement.body, taints=statement_taints)
         else_implicit_block = ImplicitBlock(statements=if_statement.orelse, taints=statement_taints)
 
-
-        def get_path_to_statement(statement, current = self.ast.body, path = []) -> list[ast.AST]:
+        def get_path_to_statement(statement, current=self.ast.body, path=[]) -> list[ast.AST]:
             if isinstance(current[0], ImplicitBlock):
                 path.append(current[0])
                 return get_path_to_statement(statement, current[0].body, path)
