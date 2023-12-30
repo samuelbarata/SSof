@@ -178,7 +178,7 @@ class ImplicitBlock:
 
     def __init__(self, taints: list[Taint], statements: list[ast.AST]):
         self.taints = taints
-        self.statements = statements
+        self.body = statements
 
 
 class Analyser:
@@ -266,7 +266,7 @@ class Analyser:
         implicit = deepcopy(implicit)
         implicit.extend(implicit_block.taints)  # used on nested ifs
 
-        taints.extend([self.analyse_statement(statement, implicit) for statement in implicit_block.statements])
+        taints.extend([self.analyse_statement(statement, implicit) for statement in implicit_block.body])
         return taints
 
     def unary_op(self, unary_op: ast.UnaryOp, implicit: list[Taint]) -> list[Taint]:
@@ -307,17 +307,35 @@ class Analyser:
         taints.extend(statement_taints)
         # We can treat the if block and the else block as entire seperate ASTs.
         # We can create a new analyser instance for each blocks
-
         # TODO?: Maybe find a way to diferenciate logs originating from the main Analyser and the ones instanced here?
-
-        # if len(if_statement.orelse) > 0:
-        #     pass
 
         if_implicit_block = ImplicitBlock(statements=if_statement.body, taints=statement_taints)
         else_implicit_block = ImplicitBlock(statements=if_statement.orelse, taints=statement_taints)
 
-        new_if_ast_body = [if_implicit_block] + self.ast.body[self.ast.body.index(if_statement) + 1::]
-        new_else_ast_body = [else_implicit_block] + self.ast.body[self.ast.body.index(if_statement) + 1::]
+
+        def get_path_to_statement(statement, current = self.ast.body, path = []) -> list[ast.AST]:
+            if isinstance(current[0], ImplicitBlock):
+                path.append(current[0])
+                return get_path_to_statement(statement, current[0].body, path)
+            return path
+
+        # Iterates the AST until it finds the ImplicitBlock we're in or the ast.body if we're in the main block
+        # Removes all statements before the ImplicitBlock
+        tmp = self.ast.body
+        for _ in range(len(get_path_to_statement(if_statement))):
+            while not (isinstance(tmp[0], ImplicitBlock) or isinstance(tmp[0], ast.If)):
+                tmp.pop(0)
+            if isinstance(tmp[0], ImplicitBlock):
+                tmp = tmp[0].body
+
+        # tmp points to the ImplicitBlock we're in or to the ast.body if we're in the main block
+        # Removes all statements before the if block
+        while tmp[0] != if_statement:
+            tmp.pop(0)
+        tmp.pop(0)
+
+        new_if_ast_body = [if_implicit_block] + self.ast.body
+        new_else_ast_body = [else_implicit_block] + self.ast.body
 
         analyser_if = deepcopy(self)
         analyser_if.ast.body = new_if_ast_body
