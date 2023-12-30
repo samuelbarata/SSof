@@ -469,7 +469,7 @@ class Analyser:
             return taints
 
         # Get taints from initialized variable
-        taints.extend(self.variables.variables[name.id].get_taints())
+        taints.extend(deepcopy(self.variables.variables[name.id].get_taints()))
         # Check if variable was not initialized in at least one flow
         if not self.variables.variables[name.id].initialized:
             taints.extend([Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns])
@@ -553,7 +553,7 @@ class Analyser:
         variable_taint = self.variables
 
         for attribute in attributes_list:
-            if attribute not in variable_taint.variables:  # uninitialized variable
+            if attribute not in variable_taint.variables:  # undefined variable
                 variable_taint.variables[attribute] = VariableTaints()
 
             variable_taint = variable_taint.variables[attribute]
