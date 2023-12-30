@@ -575,7 +575,8 @@ class Analyser_Handler():
 
         vulnerabilities: list[Vulnerability] = []
         for a in self.analysers:
-            vulnerabilities.extend(a.vulnerabilities)
+            if a.candeeiros: # Analyser was not aborted
+                vulnerabilities.extend(a.vulnerabilities)
         groups: list[list[Vulnerability]] = []
         for vuln in vulnerabilities:
             # Ignore implicit vulnerabilities for patterns that don't require it
