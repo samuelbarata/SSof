@@ -180,6 +180,11 @@ class ImplicitBlock:
         self.taints = taints
         self.body = statements
 
+    def __eq__(self, __value: object) -> bool:
+        return isinstance(__value, ImplicitBlock) and \
+            self.taints == __value.taints and \
+            self.body == __value.body
+
 
 class Analyser:
     def __init__(self, ast, patterns):
@@ -312,13 +317,16 @@ class Analyser:
         # We can treat the if block and the else block as entire seperate ASTs.
         # We can create a new analyser instance for each blocks
 
-        # WARNING: From this point forward the self.ast.body will be rendered unusable
-        #          new analyser instances will be created the modified ast.body
-
         if_implicit_block = ImplicitBlock(statements=if_statement.body, taints=statement_taints)
         else_implicit_block = ImplicitBlock(statements=if_statement.orelse, taints=statement_taints)
 
-        def get_path_to_statement(statement, path, current=self.ast.body) -> list[ast.AST]:
+        # TODO: Would be perfect to turn this into a copy of the original AST
+        new_ast_body = self.ast.body
+
+        # WARNING: From this point forward the self.ast.body will be rendered unusable
+        #          new analyser instances will be created the modified ast.body
+
+        def get_path_to_statement(statement, path, current=new_ast_body) -> list[ast.AST]:
             if isinstance(current[0], ImplicitBlock):
                 path.append(current[0])
                 return get_path_to_statement(statement, path, current[0].body)
@@ -326,8 +334,8 @@ class Analyser:
 
         # Iterates the AST until it finds the ImplicitBlock we're in or the ast.body if we're in the main block
         # Removes all statements before the ImplicitBlock
-        tmp = self.ast.body
-        for _ in range(len(get_path_to_statement(if_statement, path=[]))):
+        tmp = new_ast_body
+        for _ in range(len(get_path_to_statement(if_statement, path=[], current=tmp))):
             while not (isinstance(tmp[0], ImplicitBlock) or isinstance(tmp[0], ast.If)):
                 tmp.pop(0)
             if isinstance(tmp[0], ImplicitBlock):
@@ -339,8 +347,8 @@ class Analyser:
             tmp.pop(0)
         tmp.pop(0)
 
-        new_if_ast_body = [if_implicit_block] + self.ast.body
-        new_else_ast_body = [else_implicit_block] + self.ast.body
+        new_if_ast_body = [if_implicit_block] + new_ast_body
+        new_else_ast_body = [else_implicit_block] + new_ast_body
 
         analyser_if = deepcopy(self)
         analyser_if.ast.body = new_if_ast_body
@@ -352,25 +360,7 @@ class Analyser:
         self.abort()
 
         return []
-        # TODO?: Maybe find a way to diferenciate logs originating from the main Analyser and the ones instanced here?
 
-        else_taints = []
-
-        analyser = [deepcopy(self)]
-        if_taints = [analyser[0].analyse_statement(statement, implicit + statement_taints) for statement in if_statement.body]
-        logger.debug(f'L{if_statement.lineno} IF: {if_taints}')
-
-        if len(if_statement.orelse) > 0:
-            analyser.append(deepcopy(self))
-            else_taints = [analyser[1].analyse_statement(statement, implicit + statement_taints) for statement in if_statement.orelse]
-            logger.debug(f'L{if_statement.lineno} ELSE: {else_taints}')
-
-        self.merge_if_vars(analyser)
-
-        taints = if_taints + else_taints
-        logger.debug(f'L{if_statement.lineno}: {taints}')
-        return taints
-    
     def while_statement(self, while_statement: ast.While, implicit: list[Taint]) -> list[Taint]:
         # While(test=Compare(...), body=[...], type_ignores=[])
 
@@ -384,6 +374,8 @@ class Analyser:
 
         # TODO?: Maybe find a way to diferenciate logs originating from the main Analyser and the ones instanced here?
 
+        else_implicit_block = ImplicitBlock(statements=while_statement.body, taints=statement_taints)
+
         taints = []
 
         analyser = [deepcopy(self)]
@@ -392,11 +384,10 @@ class Analyser:
             taints.extend([analyser[0].analyse_statement(statement, implicit + statement_taints) for statement in while_statement.body])
         logger.debug(f'L{while_statement.lineno} WHILE: {taints}')
 
-        self.merge_if_vars(analyser) # TODO while: adapt merge from if to while
+        self.merge_if_vars(analyser)  # TODO while: adapt merge from if to while
 
         logger.debug(f'L{while_statement.lineno}: {taints}')
         return taints
-
 
     def bin_op(self, bin_op: ast.BinOp, implicit: list[Taint]) -> list[Taint]:
         """
