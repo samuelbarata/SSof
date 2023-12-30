@@ -312,16 +312,16 @@ class Analyser:
         if_implicit_block = ImplicitBlock(statements=if_statement.body, taints=statement_taints)
         else_implicit_block = ImplicitBlock(statements=if_statement.orelse, taints=statement_taints)
 
-        def get_path_to_statement(statement, current=self.ast.body, path=[]) -> list[ast.AST]:
+        def get_path_to_statement(statement, path, current=self.ast.body) -> list[ast.AST]:
             if isinstance(current[0], ImplicitBlock):
                 path.append(current[0])
-                return get_path_to_statement(statement, current[0].body, path)
+                return get_path_to_statement(statement, path, current[0].body)
             return path
 
         # Iterates the AST until it finds the ImplicitBlock we're in or the ast.body if we're in the main block
         # Removes all statements before the ImplicitBlock
         tmp = self.ast.body
-        for _ in range(len(get_path_to_statement(if_statement))):
+        for _ in range(len(get_path_to_statement(if_statement, path=[]))):
             while not (isinstance(tmp[0], ImplicitBlock) or isinstance(tmp[0], ast.If)):
                 tmp.pop(0)
             if isinstance(tmp[0], ImplicitBlock):
@@ -575,7 +575,7 @@ class Analyser_Handler():
 
         vulnerabilities: list[Vulnerability] = []
         for a in self.analysers:
-            if a.candeeiros: # Analyser was not aborted
+            if a.candeeiros:  # Analyser was not aborted
                 vulnerabilities.extend(a.vulnerabilities)
         groups: list[list[Vulnerability]] = []
         for vuln in vulnerabilities:
@@ -613,6 +613,8 @@ class Analyser_Handler():
                 if vuln.taint.is_sanitized():
                     if vuln.taint.sanitizer not in vuln_out['sanitized_flows']:
                         vuln_out['sanitized_flows'].append(list(vuln.taint.sanitizer))
+                    else:
+                        logger.warning(f'Vulnerability {vuln.name} has repeated sanitizers; there might be a bug')
                 else:
                     vuln_out['unsanitized_flows'] = 'yes'
             vulnerabilities.append(vuln_out)
