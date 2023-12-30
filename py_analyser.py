@@ -167,6 +167,20 @@ class Vulnerability:
         return f"Name: {self.name}, Sink: {self.sink}, Sink Line: {self.sink_line}, Taint: {self.taint}"
 
 
+class ImplicitBlock:
+    """
+    Structure to Store implicit taints for a block of statements
+
+    Parameters:
+        - taints (list[Taint]): The taints found in the block
+        - statements (list[ast.AST]): The statements that are part of the block
+    """
+
+    def __init__(self, taints: list[Taint], statements: list[ast.AST]):
+        self.taints = taints
+        self.body = statements
+
+
 class Analyser:
     def __init__(self, ast, patterns):
         self.ast = ast
@@ -175,141 +189,24 @@ class Analyser:
         self.variables: VariableTaints = VariableTaints()
         self.vulnerabilities: list[Vulnerability] = []
         logger.debug(f'Added patterns to Analyser:\n{self.patterns}')
+        self.handler_reference: Analyser_Handler = None
+        self.candeeiros = True  # Whether the analyser is alive or not
 
-    def export_results(self) -> str:
+    def abort(self):
         """
-        Exports the results of the analysis in the format specified by the project
-
-        Returns:
-            - str: The results of the analysis in JSON format
+        Aborts the analysis
         """
-
-        groups: list[list[Vulnerability]] = []
-        for vuln in self.vulnerabilities:
-            # Ignore implicit vulnerabilities for patterns that don't require it
-            skip_implicit = False
-            for pattern in patterns:
-                if vuln.taint.pattern_name == pattern.vulnerability:
-                    if not pattern.implicit and vuln.taint.implicit:
-                        skip_implicit = True
-                        break
-            if skip_implicit:
-                continue
-
-            matched = False
-            for g in groups:
-                if vuln.is_same_vulnerability(g[0]):
-                    g.append(vuln)
-                    matched = True
-                    break
-            if not matched:
-                groups.append([vuln])
-
-        if len(groups) == 0:
-            return json.dumps(['none'])
-
-        vulnerabilities = []
-        for g in groups:
-            vuln_out = {'vulnerability': g[0].name,
-                        'source': [g[0].taint.source, g[0].taint.source_line],
-                        'sink': [g[0].sink, g[0].sink_line],
-                        'unsanitized_flows': 'no',
-                        'sanitized_flows': []
-                        }
-            for vuln in g:
-                if vuln.taint.is_sanitized():
-                    vuln_out['sanitized_flows'].append(list(vuln.taint.sanitizer))
-                else:
-                    vuln_out['unsanitized_flows'] = 'yes'
-            vulnerabilities.append(vuln_out)
-
-        return json.dumps(vulnerabilities, indent=4)
-
-    def join_variables(self, current: list[str], if_vars: VariableTaints, else_vars: VariableTaints) -> VariableTaints:
-        """
-        Parameters:
-            - current (list[str]): The current 'recursive' level
-            - if_vars (VariableTaints): The variables found in the if block
-            - else_vars (VariableTaints): The variables found in the else block
-        """
-        variable_taint: VariableTaints = self.variables
-        if_var_taint: VariableTaints = if_vars
-        else_var_taint: VariableTaints = else_vars
-        for var in current:
-            variable_taint = variable_taint.variables[var]
-            if var in if_var_taint.get_variables():
-                if_var_taint = if_var_taint.variables[var]
-            else:
-                if_var_taint = None
-            if var in else_var_taint.get_variables():
-                else_var_taint = else_var_taint.variables[var]
-            else:
-                else_var_taint = None
-
-        # List of all variables at current level
-        if_set = set(if_var_taint.get_variables()) if if_var_taint is not None else set()
-        else_set = set(else_var_taint.get_variables()) if else_var_taint is not None else set()
-        var_list = list(if_set | else_set)
-
-        for var in var_list:
-            # a new Variable was defined
-            if var not in variable_taint.get_variables():
-                # Variable was defined in both branches
-                if if_var_taint is not None and else_var_taint is not None and var in if_var_taint.get_variables() and var in else_var_taint.get_variables():
-                    variable_taint.variables[var] = deepcopy(if_var_taint.variables[var])
-                    variable_taint.variables[var].merge_taints(else_var_taint.variables[var].taints)
-                    if not (if_var_taint.variables[var].initialized and else_var_taint.variables[var].initialized):
-                        variable_taint.variables[var].initialized = False
-                # Variable was defined in a single branch
-                elif if_var_taint is not None and var in if_var_taint.get_variables():
-                    variable_taint.variables[var] = deepcopy(if_var_taint.variables[var])
-                    variable_taint.variables[var].initialized = False
-                elif else_var_taint is not None and var in else_var_taint.get_variables():
-                    variable_taint.variables[var] = deepcopy(else_var_taint.variables[var])
-                    variable_taint.variables[var].initialized = False
-                else:
-                    logger.critical(f'Variable {var} not found in any branch')
-                    raise ValueError(f'Variable {var} not found in any branch')
-
-            # The variable already existed before the if/else block
-            else:
-                variable_taint.variables[var].merge_taints(if_var_taint.variables[var].taints)
-                variable_taint.variables[var].merge_taints(else_var_taint.variables[var].taints)
-
-            self.join_variables(current + [var], if_var_taint, else_var_taint)
-
-    def merge_if_vars(self, others):
-        """
-        Merges the results of the analysis with the results of another analysis
-
-        Parameters:
-            - others list[Analyser]: Analysers to be merged
-                - others[0] -> if block
-                - ? others[1] -> else block
-        """
-        if not all([isinstance(other, Analyser) for other in others]):
-            logger.critical(f'Expected List of Analysers, got {[type(other) for other in others]}')
-            raise TypeError(f'Expected List of Analysers, got {[type(other) for other in others]}')
-        others: list[Analyser]
-
-        # Merge vulnerabilities found in the other analysis
-        for other in others:
-            self.vulnerabilities.extend(other.vulnerabilities)
-
-        # Import new variables found in the other analysis
-        if len(others) == 1:  # Single if statement
-            self.join_variables([], others[0].variables, deepcopy(self.variables))
-        elif len(others) == 2:  # If-Else statement
-            self.join_variables([], others[0].variables, others[1].variables)
-        else:  # Panic!
-            logger.critical(f'Expected 1 or 2 analysers, got {len(others)}')
-            raise ValueError(f'Expected 1 or 2 analysers, got {len(others)}')
+        self.candeeiros = False
+        logger.info(f'Aborting analysis of {self.ast}')
 
     def analyse(self):
         """
         Iterates an AST and analyses each statement
         """
+        logger.info(f'Starting analysis of {self.ast}')
         for statement in self.ast.body:
+            if not self.candeeiros:  # Analysis was aborted
+                break
             self.analyse_statement(statement, [])
 
     def analyse_statement(self, statement, implicit: list[Taint]) -> list[Taint]:
@@ -322,6 +219,9 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the statement
         """
+        if not self.candeeiros:  # ignore the vulnerabilities after aborting the analysis
+            return []
+
         match statement:
             case ast.Name():
                 return self.name(statement, implicit)
@@ -345,9 +245,31 @@ class Analyser:
                 return self.unary_op(statement, implicit)
             case ast.Pass():
                 return []
+            case ImplicitBlock():
+                return self.implicit_block(statement, implicit)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
+
+    def implicit_block(self, implicit_block: ImplicitBlock, implicit: list[Taint]) -> list[Taint]:
+        """
+        Handles the case of taints originated from implicit flows, differenciating the (implicit) taints of the if/else block from the rest of the analysis
+
+        Parameters:
+            - implicit_block (ImplicitBlock): The implicit block to analyse
+
+        Returns:
+            - list[Taint]: The taints found in the implicit block
+        """
+
+        taints = deepcopy(implicit)
+        taints.extend(implicit_block.taints)
+
+        implicit = deepcopy(implicit)
+        implicit.extend(implicit_block.taints)  # used on nested ifs
+
+        taints.extend([self.analyse_statement(statement, implicit) for statement in implicit_block.body])
+        return taints
 
     def unary_op(self, unary_op: ast.UnaryOp, implicit: list[Taint]) -> list[Taint]:
         """
@@ -388,24 +310,46 @@ class Analyser:
         # We can treat the if block and the else block as entire seperate ASTs.
         # We can create a new analyser instance for each blocks
 
-        # TODO?: Maybe find a way to diferenciate logs originating from the main Analyser and the ones instanced here?
+        # WARNING: From this point forward the self.ast.body will be rendered unusable
+        #          new analyser instances will be created the modified ast.body
 
-        else_taints = []
+        if_implicit_block = ImplicitBlock(statements=if_statement.body, taints=statement_taints)
+        else_implicit_block = ImplicitBlock(statements=if_statement.orelse, taints=statement_taints)
 
-        analyser = [deepcopy(self)]
-        if_taints = [analyser[0].analyse_statement(statement, implicit + statement_taints) for statement in if_statement.body]
-        logger.debug(f'L{if_statement.lineno} IF: {if_taints}')
+        def get_path_to_statement(statement, path, current=self.ast.body) -> list[ast.AST]:
+            if isinstance(current[0], ImplicitBlock):
+                path.append(current[0])
+                return get_path_to_statement(statement, path, current[0].body)
+            return path
 
-        if len(if_statement.orelse) > 0:
-            analyser.append(deepcopy(self))
-            else_taints = [analyser[1].analyse_statement(statement, implicit + statement_taints) for statement in if_statement.orelse]
-            logger.debug(f'L{if_statement.lineno} ELSE: {else_taints}')
+        # Iterates the AST until it finds the ImplicitBlock we're in or the ast.body if we're in the main block
+        # Removes all statements before the ImplicitBlock
+        tmp = self.ast.body
+        for _ in range(len(get_path_to_statement(if_statement, path=[]))):
+            while not (isinstance(tmp[0], ImplicitBlock) or isinstance(tmp[0], ast.If)):
+                tmp.pop(0)
+            if isinstance(tmp[0], ImplicitBlock):
+                tmp = tmp[0].body
 
-        self.merge_if_vars(analyser)
+        # tmp points to the ImplicitBlock we're in or to the ast.body if we're in the main block
+        # Removes all statements before the if block
+        while tmp[0] != if_statement:
+            tmp.pop(0)
+        tmp.pop(0)
 
-        taints = if_taints + else_taints
-        logger.debug(f'L{if_statement.lineno}: {taints}')
-        return taints
+        new_if_ast_body = [if_implicit_block] + self.ast.body
+        new_else_ast_body = [else_implicit_block] + self.ast.body
+
+        analyser_if = deepcopy(self)
+        analyser_if.ast.body = new_if_ast_body
+        analyser_else = deepcopy(self)
+        analyser_else.ast.body = new_else_ast_body
+
+        self.handler_reference.add_analyser(analyser_if)
+        self.handler_reference.add_analyser(analyser_else)
+        self.abort()
+
+        return []
 
     def bin_op(self, bin_op: ast.BinOp, implicit: list[Taint]) -> list[Taint]:
         """
@@ -463,12 +407,20 @@ class Analyser:
         # Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())
         taints = deepcopy(implicit)
 
-        taints.extend(self.analyse_statement(attribute.value, implicit))
+        # analyse the other attributes [c]
+        for taint in self.analyse_statement(attribute.value, implicit):
+            # Will not add repeated taints;
+            # taints from a.b.c will also be discovered on a.b and a
+            if taint not in taints:
+                taints.append(taint)
+
+        # check if attribute is source [e]
         for pattern in self.patterns:
             # check if attribute is source
             if attribute.attr in pattern.sources:
                 taints.append(Taint(attribute.attr, attribute.lineno, pattern.vulnerability))
 
+        # get attribute from analyser variables
         attributes_list = self.get_name(attribute)
         variable_taint = self.variables
         for attribute_v in attributes_list:
@@ -477,7 +429,10 @@ class Analyser:
             else:
                 variable_taint = VariableTaints()
 
+        # get taints from variable
         taints.extend(deepcopy(variable_taint.taints))
+
+        # taints from uninitialized variable
         if not variable_taint.initialized:
             taints.extend([Taint(attribute.attr, attribute.lineno, pattern.vulnerability) for pattern in self.patterns])
 
@@ -610,6 +565,78 @@ class Analyser:
                     logger.debug(f"L{lineno} Vulnerability details: {vuln}")
 
 
+class Analyser_Handler():
+    def __init__(self):
+        self.analysers: list[Analyser] = []
+
+    def add_analyser(self, analyser: Analyser):
+        """
+        Adds an analyser to the handler and runs the analyse function
+
+        Parameters:
+            - analyser (Analyser): The analyser to add to the handler
+        """
+        self.analysers.append(analyser)
+        analyser.handler_reference = self
+        analyser.analyse()
+
+    def export_results(self) -> str:
+        """
+        Exports the results of the analysis in the format specified by the project
+
+        Returns:
+            - str: The results of the analysis in JSON format
+        """
+
+        vulnerabilities: list[Vulnerability] = []
+        for a in self.analysers:
+            if a.candeeiros:  # Analyser was not aborted
+                vulnerabilities.extend(a.vulnerabilities)
+        groups: list[list[Vulnerability]] = []
+        for vuln in vulnerabilities:
+            # Ignore implicit vulnerabilities for patterns that don't require it
+            skip_implicit = False
+            for pattern in patterns:
+                if vuln.taint.pattern_name == pattern.vulnerability:
+                    if not pattern.implicit and vuln.taint.implicit:
+                        skip_implicit = True
+                        break
+            if skip_implicit:
+                continue
+
+            matched = False
+            for g in groups:
+                if vuln.is_same_vulnerability(g[0]):
+                    g.append(vuln)
+                    matched = True
+                    break
+            if not matched:
+                groups.append([vuln])
+
+        if len(groups) == 0:
+            return json.dumps(['none'])
+
+        vulnerabilities = []
+        for g in groups:
+            vuln_out = {'vulnerability': g[0].name,
+                        'source': [g[0].taint.source, g[0].taint.source_line],
+                        'sink': [g[0].sink, g[0].sink_line],
+                        'unsanitized_flows': 'no',
+                        'sanitized_flows': []
+                        }
+            for vuln in g:
+                if vuln.taint.is_sanitized():
+                    if vuln.taint.sanitizer not in vuln_out['sanitized_flows']:
+                        vuln_out['sanitized_flows'].append(list(vuln.taint.sanitizer))
+                    else:
+                        logger.warning(f'Vulnerability {vuln.name} has repeated sanitizers; there might be a bug')
+                else:
+                    vuln_out['unsanitized_flows'] = 'yes'
+            vulnerabilities.append(vuln_out)
+
+        return json.dumps(vulnerabilities, indent=4)
+
+
 if __name__ == '__main__':
     project_root = os.path.dirname(os.path.abspath(__file__))
 
@@ -644,12 +671,13 @@ if __name__ == '__main__':
         ast_py = ast.parse(f.read())
         logger.debug(ast.dump(ast_py))
 
-    # Analyse slice
-    analyser = Analyser(ast_py, patterns)
-    analyser.analyse()
+    # Add main analyser to the handler
+    handler = Analyser_Handler()
+    handler.add_analyser(Analyser(ast_py, patterns))
+    # the analyser will add more analysers as it runs
 
     # Export results
     output_file_name = f"{args.output_folder}/{extract_filename_without_extension(args.slice)}.output.json"
     make_folder_exist(args.output_folder)
     with open(output_file_name, 'w') as f:
-        f.write(analyser.export_results())
+        f.write(handler.export_results())
