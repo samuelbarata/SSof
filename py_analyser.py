@@ -197,11 +197,13 @@ class Analyser:
         Aborts the analysis
         """
         self.candeeiros = False
+        logger.info(f'Aborting analysis of {self.ast}')
 
     def analyse(self):
         """
         Iterates an AST and analyses each statement
         """
+        logger.info(f'Starting analysis of {self.ast}')
         for statement in self.ast.body:
             if not self.candeeiros:  # Analysis was aborted
                 break
@@ -307,7 +309,9 @@ class Analyser:
         taints.extend(statement_taints)
         # We can treat the if block and the else block as entire seperate ASTs.
         # We can create a new analyser instance for each blocks
-        # TODO?: Maybe find a way to diferenciate logs originating from the main Analyser and the ones instanced here?
+
+        # WARNING: From this point forward the self.ast.body will be rendered unusable
+        #          new analyser instances will be created the modified ast.body
 
         if_implicit_block = ImplicitBlock(statements=if_statement.body, taints=statement_taints)
         else_implicit_block = ImplicitBlock(statements=if_statement.orelse, taints=statement_taints)
