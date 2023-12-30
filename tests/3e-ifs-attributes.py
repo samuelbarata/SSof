@@ -10,13 +10,13 @@ if True:
     tmp = a.b.c.d.source()
     sanitized_tmp = a.sanitizer(tmp)
     a.b.sink(tmp, sanitized_tmp)
-    a.b.c.k = sanitize(j)
+    a.b.c.k = sanitizer(j)
 else:
     a.b.c.k = sanitize(j)
 
 # k is always sanitized
 sink(a.b.c.k)
-sink(sanitize(a.b.c.k))
+sink(sanitizer(a.b.c.k))
 
 
 #a = source()
