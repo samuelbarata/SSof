@@ -403,12 +403,20 @@ class Analyser:
         # Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())
         taints = deepcopy(implicit)
 
-        taints.extend(self.analyse_statement(attribute.value, implicit))
+        # analyse the other attributes [c]
+        for taint in self.analyse_statement(attribute.value, implicit):
+            # Will not add repeated taints;
+            # taints from a.b.c will also be discovered on a.b and a
+            if taint not in taints:
+                taints.append(taint)
+
+        # check if attribute is source [e]
         for pattern in self.patterns:
             # check if attribute is source
             if attribute.attr in pattern.sources:
                 taints.append(Taint(attribute.attr, attribute.lineno, pattern.vulnerability))
 
+        # get attribute from analyser variables
         attributes_list = self.get_name(attribute)
         variable_taint = self.variables
         for attribute_v in attributes_list:
@@ -417,7 +425,10 @@ class Analyser:
             else:
                 variable_taint = VariableTaints()
 
+        # get taints from variable
         taints.extend(deepcopy(variable_taint.taints))
+
+        # taints from uninitialized variable
         if not variable_taint.initialized:
             taints.extend([Taint(attribute.attr, attribute.lineno, pattern.vulnerability) for pattern in self.patterns])
 
