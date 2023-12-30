@@ -609,6 +609,74 @@ class Analyser:
                     logger.info(f"Found vulnerability: {vuln.name}")
                     logger.debug(f"L{lineno} Vulnerability details: {vuln}")
 
+class Analyser_Handler():
+    def __init__(self):
+        self.analysers: list[Analyser] = []
+
+    def add_analyser(self, analyser:Analyser):
+        """
+        Adds an analyser to the handler and runs the analyse function
+        
+        Parameters:
+            - analyser (Analyser): The analyser to add to the handler
+        """
+        self.analysers.append(analyser)
+        analyser.analyse()
+
+    def export_results(self) -> str:
+        """
+        Exports the results of the analysis in the format specified by the project
+
+        Returns:
+            - str: The results of the analysis in JSON format
+        """
+        
+        vulnerabilities: list[Vulnerability] = []
+        for a in self.analysers:
+            vulnerabilities.extend(a.vulnerabilities)
+        groups: list[list[Vulnerability]] = []
+        for vuln in vulnerabilities:
+            # Ignore implicit vulnerabilities for patterns that don't require it
+            skip_implicit = False
+            for pattern in patterns:
+                if vuln.taint.pattern_name == pattern.vulnerability:
+                    if not pattern.implicit and vuln.taint.implicit:
+                        skip_implicit = True
+                        break
+            if skip_implicit:
+                continue
+
+            matched = False
+            for g in groups:
+                if vuln.is_same_vulnerability(g[0]):
+                    g.append(vuln)
+                    matched = True
+                    break
+            if not matched:
+                groups.append([vuln])
+
+        if len(groups) == 0:
+            return json.dumps(['none'])
+
+        vulnerabilities = []
+        for g in groups:
+            vuln_out = {'vulnerability': g[0].name,
+                        'source': [g[0].taint.source, g[0].taint.source_line],
+                        'sink': [g[0].sink, g[0].sink_line],
+                        'unsanitized_flows': 'no',
+                        'sanitized_flows': []
+                        }
+            for vuln in g:
+                if vuln.taint.is_sanitized():
+                    vuln_out['sanitized_flows'].append(list(vuln.taint.sanitizer))
+                else:
+                    vuln_out['unsanitized_flows'] = 'yes'
+            vulnerabilities.append(vuln_out)
+
+        return json.dumps(vulnerabilities, indent=4)
+
+
+
 
 if __name__ == '__main__':
     project_root = os.path.dirname(os.path.abspath(__file__))
@@ -644,12 +712,13 @@ if __name__ == '__main__':
         ast_py = ast.parse(f.read())
         logger.debug(ast.dump(ast_py))
 
-    # Analyse slice
-    analyser = Analyser(ast_py, patterns)
-    analyser.analyse()
-
+    # Add main analyser to the handler
+    handler = Analyser_Handler()
+    handler.add_analyser(Analyser(ast_py, patterns))
+    # the analyser will add more analysers as it runs
+    
     # Export results
     output_file_name = f"{args.output_folder}/{extract_filename_without_extension(args.slice)}.output.json"
     make_folder_exist(args.output_folder)
     with open(output_file_name, 'w') as f:
-        f.write(analyser.export_results())
+        f.write(handler.export_results())
