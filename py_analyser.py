@@ -611,7 +611,8 @@ class Analyser_Handler():
                         }
             for vuln in g:
                 if vuln.taint.is_sanitized():
-                    vuln_out['sanitized_flows'].append(list(vuln.taint.sanitizer))
+                    if vuln.taint.sanitizer not in vuln_out['sanitized_flows']:
+                        vuln_out['sanitized_flows'].append(list(vuln.taint.sanitizer))
                 else:
                     vuln_out['unsanitized_flows'] = 'yes'
             vulnerabilities.append(vuln_out)
