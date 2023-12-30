@@ -12,7 +12,7 @@ if True:
     a.b.sink(tmp, sanitized_tmp)
     a.b.c.k = sanitizer(j)
 else:
-    a.b.c.k = sanitize(j)
+    a.b.c.k = sanitizer(j)
 
 # k is always sanitized
 sink(a.b.c.k)
