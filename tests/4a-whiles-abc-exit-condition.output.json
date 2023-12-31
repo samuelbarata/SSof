@@ -9,7 +9,7 @@
   {
     "vulnerability": "A_2",
     "source": ["source", 1],
-    "sink": ["sink", 55],
+    "sink": ["sink", 54],
     "unsanitized_flows": "yes",
     "sanitized_flows": []
   }
