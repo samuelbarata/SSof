@@ -209,10 +209,10 @@ class Analyser:
         Iterates an AST and analyses each statement
         """
         logger.info(f'Starting analysis of {self.ast}')
-        for statement in self.ast.body:
-            if not self.candeeiros:  # Analysis was aborted
-                break
-            self.analyse_statement(statement, [])
+        # Being a while allows us to modify the ast.body while iterating it
+        while len(self.ast.body) > 0 and self.candeeiros:
+            self.analyse_statement(self.ast.body[0], [])
+            self.ast.body.pop(0)
 
     def analyse_statement(self, statement, implicit: list[Taint]) -> list[Taint]:
         """
@@ -307,7 +307,6 @@ class Analyser:
         return taints
 
     def if_statement(self, if_statement: ast.If, implicit: list[Taint]) -> list[Taint]:
-
         taints = deepcopy(implicit)
         statement_taints = self.analyse_statement(if_statement.test, implicit)
         for taint in statement_taints:
@@ -322,6 +321,9 @@ class Analyser:
 
         # TODO: Would be perfect to turn this into a copy of the original AST
         new_ast_body = self.ast.body
+
+        analyser_if = deepcopy(self)
+        analyser_else = deepcopy(self)
 
         # WARNING: From this point forward the self.ast.body will be rendered unusable
         #          new analyser instances will be created the modified ast.body
@@ -347,13 +349,9 @@ class Analyser:
             tmp.pop(0)
         tmp.pop(0)
 
-        new_if_ast_body = [if_implicit_block] + new_ast_body
-        new_else_ast_body = [else_implicit_block] + new_ast_body
-
-        analyser_if = deepcopy(self)
-        analyser_if.ast.body = new_if_ast_body
-        analyser_else = deepcopy(self)
-        analyser_else.ast.body = new_else_ast_body
+        #self.ast.body = [if_implicit_block] + new_ast_body
+        analyser_if.ast.body = [if_implicit_block] + new_ast_body
+        analyser_else.ast.body = [else_implicit_block] + new_ast_body
 
         self.handler_reference.add_analyser(analyser_if)
         self.handler_reference.add_analyser(analyser_else)
