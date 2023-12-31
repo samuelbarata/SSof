@@ -167,23 +167,23 @@ class Vulnerability:
         return f"Name: {self.name}, Sink: {self.sink}, Sink Line: {self.sink_line}, Taint: {self.taint}"
 
 
-class ImplicitBlock:
+class ImplicitStatement:
     """
-    Structure to Store implicit taints for a block of statements
+    Structure to Store implicit taints for a single statement
 
     Parameters:
-        - taints (list[Taint]): The taints found in the block
-        - statements (list[ast.AST]): The statements that are part of the block
+        - taints (list[Taint]): The taints found in the statement
+        - statement (ast.AST): The statement
     """
 
-    def __init__(self, taints: list[Taint], statements: list[ast.AST]):
+    def __init__(self, taints: list[Taint], statement: ast.AST):
         self.taints = taints
-        self.body = statements
+        self.statement = statement
 
-    def __eq__(self, __value: object) -> bool:
-        return isinstance(__value, ImplicitBlock) and \
-            self.taints == __value.taints and \
-            self.body == __value.body
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, ImplicitStatement) and \
+            self.taints == other.taints and \
+            self.statement == other.statement
 
 
 class Analyser:
@@ -195,14 +195,6 @@ class Analyser:
         self.vulnerabilities: list[Vulnerability] = []
         logger.debug(f'Added patterns to Analyser:\n{self.patterns}')
         self.handler_reference: Analyser_Handler = None
-        self.candeeiros = True  # Whether the analyser is alive or not
-
-    def abort(self):
-        """
-        Aborts the analysis
-        """
-        self.candeeiros = False
-        logger.info(f'Aborting analysis of {self.ast}')
 
     def analyse(self):
         """
@@ -210,9 +202,8 @@ class Analyser:
         """
         logger.info(f'Starting analysis of {self.ast}')
         # Being a while allows us to modify the ast.body while iterating it
-        while len(self.ast.body) > 0 and self.candeeiros:
-            self.analyse_statement(self.ast.body[0], [])
-            self.ast.body.pop(0)
+        while len(self.ast.body) > 0:
+            self.analyse_statement(self.ast.body.pop(0), implicit=[])
 
     def analyse_statement(self, statement, implicit: list[Taint]) -> list[Taint]:
         """
@@ -224,9 +215,6 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the statement
         """
-        if not self.candeeiros:  # ignore the vulnerabilities after aborting the analysis
-            return []
-
         match statement:
             case ast.Name():
                 return self.name(statement, implicit)
@@ -250,32 +238,33 @@ class Analyser:
                 return self.unary_op(statement, implicit)
             case ast.Pass():
                 return []
-            case ImplicitBlock():
-                return self.implicit_block(statement, implicit)
+            case ImplicitStatement():
+                return self.implicit_statement(statement, implicit)
             case ast.While():
                 return self.while_statement(statement, implicit)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
 
-    def implicit_block(self, implicit_block: ImplicitBlock, implicit: list[Taint]) -> list[Taint]:
+    def implicit_statement(self, implicit_statement: ImplicitStatement, implicit: list[Taint]) -> list[Taint]:
         """
-        Handles the case of taints originated from implicit flows, differenciating the (implicit) taints of the if/else block from the rest of the analysis
+        Handles the case of taints originated from implicit flows, differenciating the (implicit) taints of the
+        if/else block from the rest of the analysis
 
         Parameters:
-            - implicit_block (ImplicitBlock): The implicit block to analyse
+            - implicit_statement (ImplicitStatement): The implicit statement to analyse
 
         Returns:
-            - list[Taint]: The taints found in the implicit block
+            - list[Taint]: The taints found in the implicit statement
         """
 
         taints = deepcopy(implicit)
-        taints.extend(implicit_block.taints)
+        taints.extend(implicit_statement.taints)
 
         implicit = deepcopy(implicit)
-        implicit.extend(implicit_block.taints)  # used on nested ifs
+        implicit.extend(implicit_statement.taints)
 
-        taints.extend([self.analyse_statement(statement, implicit) for statement in implicit_block.body])
+        taints.extend(self.analyse_statement(implicit_statement.statement, implicit))
         return taints
 
     def unary_op(self, unary_op: ast.UnaryOp, implicit: list[Taint]) -> list[Taint]:
@@ -316,47 +305,15 @@ class Analyser:
         # We can treat the if block and the else block as entire seperate ASTs.
         # We can create a new analyser instance for each blocks
 
-        if_implicit_block = ImplicitBlock(statements=if_statement.body, taints=statement_taints)
-        else_implicit_block = ImplicitBlock(statements=if_statement.orelse, taints=statement_taints)
+        else_analyser = deepcopy(self)
 
-        # TODO: Would be perfect to turn this into a copy of the original AST
-        new_ast_body = self.ast.body
+        if_flow = [ImplicitStatement(taints=statement_taints + implicit, statement=stmt) for stmt in if_statement.body]
+        else_flow = [ImplicitStatement(taints=statement_taints + implicit, statement=stmt) for stmt in if_statement.orelse]
 
-        analyser_if = deepcopy(self)
-        analyser_else = deepcopy(self)
-
-        # WARNING: From this point forward the self.ast.body will be rendered unusable
-        #          new analyser instances will be created the modified ast.body
-
-        def get_path_to_statement(statement, path, current=new_ast_body) -> list[ast.AST]:
-            if isinstance(current[0], ImplicitBlock):
-                path.append(current[0])
-                return get_path_to_statement(statement, path, current[0].body)
-            return path
-
-        # Iterates the AST until it finds the ImplicitBlock we're in or the ast.body if we're in the main block
-        # Removes all statements before the ImplicitBlock
-        tmp = new_ast_body
-        for _ in range(len(get_path_to_statement(if_statement, path=[], current=tmp))):
-            while not (isinstance(tmp[0], ImplicitBlock) or isinstance(tmp[0], ast.If)):
-                tmp.pop(0)
-            if isinstance(tmp[0], ImplicitBlock):
-                tmp = tmp[0].body
-
-        # tmp points to the ImplicitBlock we're in or to the ast.body if we're in the main block
-        # Removes all statements before the if block
-        while tmp[0] != if_statement:
-            tmp.pop(0)
-        tmp.pop(0)
-
-        #self.ast.body = [if_implicit_block] + new_ast_body
-        analyser_if.ast.body = [if_implicit_block] + new_ast_body
-        analyser_else.ast.body = [else_implicit_block] + new_ast_body
-
-        self.handler_reference.add_analyser(analyser_if)
-        self.handler_reference.add_analyser(analyser_else)
-        self.abort()
-
+        # NOTE: make sure to add the else analyser first, so that the else_analyser.ast.body is not affected by the altered self.ast.body
+        else_analyser.ast.body = else_flow + self.ast.body
+        self.ast.body = if_flow + self.ast.body
+        self.handler_reference.add_analyser(else_analyser)
         return []
 
     def while_statement(self, while_statement: ast.While, implicit: list[Taint]) -> list[Taint]:
@@ -626,8 +583,7 @@ class Analyser_Handler():
 
         vulnerabilities: list[Vulnerability] = []
         for a in self.analysers:
-            if a.candeeiros:  # Analyser was not aborted
-                vulnerabilities.extend(a.vulnerabilities)
+            vulnerabilities.extend(a.vulnerabilities)
         groups: list[list[Vulnerability]] = []
         for vuln in vulnerabilities:
             # Ignore implicit vulnerabilities for patterns that don't require it
