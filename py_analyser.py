@@ -6,7 +6,8 @@ import ast
 import os
 from copy import deepcopy
 
-MAX_ITERATIONS = 250
+# Safeguard to prevent infinite loops
+MAX_WHILE_ITERATIONS = 50
 
 LOG_LEVELS = {
     'INFO': logging.INFO,
@@ -71,7 +72,9 @@ class Taint:
             - sanitizer (str): The name of the sanitizer function
             - line (int): The line where the sanitizer is called
         """
-        self.sanitizer.append((sanitizer, line))
+        sanitizer_tuple = (sanitizer, line)
+        if sanitizer_tuple not in self.sanitizer:
+            self.sanitizer.append(sanitizer_tuple)
 
     def merge_sanitizers(self, other):
         """
@@ -93,7 +96,24 @@ class Taint:
             self.source == other.source and \
             self.source_line == other.source_line and \
             self.implicit == other.implicit and \
-            self.pattern_name == other.pattern_name
+            self.pattern_name == other.pattern_name and \
+            self.sanitizer == other.sanitizer
+
+    def __hash__(self):
+        # Combine hash values of individual attributes
+        hash_source = hash(self.source)
+        hash_source_line = hash(self.source_line)
+        hash_implicit = hash(self.implicit)
+        hash_pattern_name = hash(self.pattern_name)
+        hash_sanitizer = hash(tuple(self.sanitizer))
+
+        # XOR (^) is used to combine the hash values
+        combined_hash = (
+            hash_source ^ hash_source_line ^ hash_implicit ^
+            hash_pattern_name ^ hash_sanitizer
+        )
+
+        return combined_hash
 
     def __repr__(self) -> str:
         return f"Taint(Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.is_sanitized()}, Pattern: {self.pattern_name})"
@@ -267,13 +287,12 @@ class Analyser:
             - list[Taint]: The taints found in the implicit statement
         """
 
-        taints = deepcopy(implicit)
-        taints.extend(implicit_statement.taints)
+        implicit_taints = deepcopy(implicit)
+        implicit_taints.extend(implicit_statement.taints)
 
-        implicit = deepcopy(implicit)
-        implicit.extend(implicit_statement.taints)
-
-        taints.extend(self.analyse_statement(implicit_statement.statement, implicit))
+        taints = deepcopy(implicit_taints)
+        taints.extend(self.analyse_statement(implicit_statement.statement, implicit_taints))
+        logger.debug(f'L{implicit_statement.statement.lineno} Implicit: {taints}')
         return taints
 
     def unary_op(self, unary_op: ast.UnaryOp, implicit: list[Taint]) -> list[Taint]:
@@ -305,12 +324,10 @@ class Analyser:
         return taints
 
     def if_statement(self, if_statement: ast.If, implicit: list[Taint]) -> list[Taint]:
-        taints = deepcopy(implicit)
         statement_taints = self.analyse_statement(if_statement.test, implicit)
         for taint in statement_taints:
             taint.implicit = True
 
-        taints.extend(statement_taints)
         # We can treat the if block and the else block as entire seperate ASTs.
         # We can create a new analyser instance for each blocks
 
@@ -323,18 +340,17 @@ class Analyser:
         else_analyser.ast.body = else_flow + self.ast.body
         self.ast.body = if_flow + self.ast.body
         self.handler_reference.add_analyser(else_analyser)
+
         # If stmt doesn't need to return a list of taints since it can never be used in an expression
         return []
 
     def while_statement(self, while_statement: ast.While, implicit: list[Taint]) -> list[Taint]:
         # While(test=Compare(...), body=[...], type_ignores=[])
 
-        taints = deepcopy(implicit)
         statement_taints = self.analyse_statement(while_statement.test, implicit)
         for taint in statement_taints:
             taint.implicit = True
 
-        taints.extend(statement_taints)
         # We can treat the while as an if block with an empty else
 
         # Analyse not entering the while
@@ -349,9 +365,10 @@ class Analyser:
 
         # if taints are still flowing through the while, analyse entering the while again
         breaking_condition = old_variables == self.variables
-        if not (breaking_condition or self.whiles_iterations.get(while_statement.lineno, 0) >= MAX_ITERATIONS):
+        if not (breaking_condition or self.whiles_iterations.get(while_statement.lineno, 0) >= MAX_WHILE_ITERATIONS):
             # Add 1 to iterations count
             self.whiles_iterations[while_statement.lineno] = self.whiles_iterations.get(while_statement.lineno, 0) + 1
+            # Resets AST to the state before the while was processed
             self.ast.body = [while_backup] + self.ast.body
 
         # While stmt doesn't need to return a list of taints since it can never be used in an expression
@@ -483,14 +500,16 @@ class Analyser:
         attributes_list = self.get_name(assignment.targets[0])
 
         variable_taint = self.variables
-
         for attribute in attributes_list:
             if attribute not in variable_taint.variables:  # undefined variable
                 variable_taint.variables[attribute] = VariableTaints()
 
             variable_taint = variable_taint.variables[attribute]
 
-        variable_taint.assign_taints(taints)
+        # Filter out repeated taints
+        taints_to_assign = list(set(taints))
+
+        variable_taint.assign_taints(taints_to_assign)
         logger.debug(f'L{assignment.lineno} {attributes_list}: {taints}')
 
         for pattern in self.patterns:
