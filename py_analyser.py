@@ -335,10 +335,9 @@ class Analyser:
             - list[Taint]: The taints found in the implicit statement
         """
 
-        implicit_taints = deepcopy(implicit)
-        implicit_taints.extend(implicit_statement.taints)
+        implicit_taints = implicit + implicit_statement.taints
 
-        taints = deepcopy(implicit_taints)
+        taints = []
         taints.extend(self.analyse_statement(implicit_statement.statement, implicit_taints))
         logger.debug(f'L{implicit_statement.statement.lineno} Implicit: {taints}')
         return taints
@@ -351,7 +350,7 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the unary operation
         """
-        taints = self.analyse_statement(unary_op.operand, implicit) + deepcopy(implicit)
+        taints = self.analyse_statement(unary_op.operand, implicit)
         logger.debug(f'L{unary_op.lineno} {type(unary_op.op)}: {taints}')
         return taints
 
@@ -364,7 +363,7 @@ class Analyser:
             - list[Taint]: The taints found in the left and the right side of the compare statement
         """
         # Compare(left=Name(id='c', ctx=Load()), ops=[Lt()], comparators=[Constant(value=3)])
-        taints = deepcopy(implicit)
+        taints = []
         taints.extend(self.analyse_statement(compare.left, implicit))
         for comparator in compare.comparators:
             taints.extend(self.analyse_statement(comparator, implicit))
@@ -437,7 +436,7 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the left and the right side of the binary operation
         """
-        taints = deepcopy(implicit)
+        taints = []
         taints.extend(self.analyse_statement(bin_op.left, implicit) + self.analyse_statement(bin_op.right, implicit))
         logger.debug(f'L{bin_op.lineno} {type(bin_op.op)}: {taints}')
         return taints
@@ -453,7 +452,10 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the variable
         """
+        # FIXME:
         taints = deepcopy(implicit)
+        #taints = []
+
         # Name(id='a', ctx=Load())
         # Variable was never assigned a value [Uninitialized]
         if name.id not in self.variables.get_variables():
@@ -483,7 +485,7 @@ class Analyser:
             - list[Taint]: The taints found in the attribute
         """
         # Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())
-        taints = deepcopy(implicit)
+        taints = []
 
         # analyse the other attributes [c]
         for taint in self.analyse_statement(attribute.value, implicit):
@@ -549,7 +551,10 @@ class Analyser:
         # TODO?: Handle multiple targets
         assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
 
+        # FIXME:
         taints = deepcopy(implicit)
+        #taints = []
+
         # Analyse the right side of the assignment
         taints.extend(self.analyse_statement(assignment.value, implicit))
         attributes_list = self.get_name(assignment.targets[0])
