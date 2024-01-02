@@ -395,14 +395,12 @@ class Analyser:
             #     taint.implicit = True
 
             # Stores the taints from the while condition
-            #self.whiles_iterations[while_statement.lineno].original_taints = deepcopy(statement_taints)
+            # self.whiles_iterations[while_statement.lineno].original_taints = deepcopy(statement_taints)
 
         while_status = self.whiles_iterations.get(while_statement.lineno)
 
-
         # Analyse not entering the while
         self.handler_reference.add_analyser(deepcopy(self), f'Exiting While block from line {while_statement.lineno} after {while_status.iteration_count} iterations')
-
 
         # if taints are still flowing through the while, analyse entering the while again (breanking condition)
         if while_status.should_continue(variables=self.variables):
@@ -442,7 +440,7 @@ class Analyser:
         """
         # FIXME:
         taints = []
-        #taints = deepcopy(implicit)
+        # taints = deepcopy(implicit)
 
         # Name(id='a', ctx=Load())
         # Variable was never assigned a value [Uninitialized]
@@ -553,7 +551,7 @@ class Analyser:
             variable_taint = variable_taint.variables[attribute]
 
         # Filter out repeated taints
-        taints_to_assign = list(set(taints+implicit))
+        taints_to_assign = list(set(taints + implicit))
 
         variable_taint.assign_taints(taints_to_assign)
         logger.debug(f'L{assignment.lineno} {attributes_list}: {taints}')
@@ -667,7 +665,7 @@ class Analyser_Handler():
                 lines = [stmt.lineno for stmt in self.flows[analyser_id]]
                 flow = []
                 for idx, line in enumerate(self.slice.splitlines()):
-                    if idx+1 in lines:
+                    if idx + 1 in lines:
                         flow.append(f'{idx+1}: {line}')
                 logger.debug(f'Flow {analyser_id}: {flow}')
 
