@@ -214,6 +214,41 @@ class ImplicitStatement:
             self.statement == other.statement
 
 
+class WhileStatus:
+    """
+    Structure to Store the while status
+
+    Parameters:
+        - iteration_count (int): How many times we "processed" this while cycle
+        - variable_status (VariableTaints): The status of the previously executed while scycle, to match for changes
+    """
+
+    def __init__(self) -> None:
+        self.iteration_count = 0
+        self.variable_status = None
+
+    def modifiy_variables(self, other: VariableTaints) -> bool:
+        """
+        Saves current variables state
+
+        Parameters:
+            - other (VariableTaints): The VariableTaints to assign to the WhileStatus
+
+        Returns:
+            - (bool) Whether the variables were modified or not
+        """
+        tmp = self.variable_status != other
+        self.variable_status = deepcopy(other)
+        return tmp
+
+    def increment_iteration_count(self):
+        self.iteration_count += 1
+        return self.iteration_count
+
+    def should_continue(self, variables: VariableTaints) -> bool:
+        return (self.increment_iteration_count() < MAX_WHILE_ITERATIONS and self.modifiy_variables(variables))
+
+
 class Analyser:
     def __init__(self, ast, patterns):
         self.ast = ast
@@ -223,7 +258,7 @@ class Analyser:
         self.vulnerabilities: list[Vulnerability] = []
         logger.debug(f'Added patterns to Analyser:\n{self.patterns}')
         self.handler_reference: Analyser_Handler = None
-        self.whiles_iterations = {}
+        self.whiles_iterations: dict[int, WhileStatus] = {}
 
     def analyse(self):
         """
@@ -358,18 +393,17 @@ class Analyser:
 
         old_variables = deepcopy(self.variables)
 
-        # Analyse while contents
-        while_backup = deepcopy(while_statement)
-        while len(while_statement.body) > 0:
-            self.analyse_statement(while_statement.body.pop(0), implicit + statement_taints)
+        if while_statement.lineno not in self.whiles_iterations.keys():
+            self.whiles_iterations[while_statement.lineno] = WhileStatus()
 
-        # if taints are still flowing through the while, analyse entering the while again
-        breaking_condition = old_variables == self.variables
-        if not (breaking_condition or self.whiles_iterations.get(while_statement.lineno, 0) >= MAX_WHILE_ITERATIONS):
-            # Add 1 to iterations count
-            self.whiles_iterations[while_statement.lineno] = self.whiles_iterations.get(while_statement.lineno, 0) + 1
-            # Resets AST to the state before the while was processed
-            self.ast.body = [while_backup] + self.ast.body
+        while_status = self.whiles_iterations.get(while_statement.lineno)
+
+        # if taints are still flowing through the while, analyse entering the while again (breanking condition)
+        if while_status.should_continue(variables=self.variables):
+            # update ast.body to repeat the cycle one more time
+            while_flow = [ImplicitStatement(taints=statement_taints + implicit, statement=stmt) for stmt in while_statement.body]
+            # Resets AST to the state before the while was processed, plus one iteration of the while cycle
+            self.ast.body = while_flow + [while_statement] + self.ast.body
 
         # While stmt doesn't need to return a list of taints since it can never be used in an expression
         return []
