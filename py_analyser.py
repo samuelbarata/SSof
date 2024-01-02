@@ -389,13 +389,6 @@ class Analyser:
         if while_statement.lineno not in self.whiles_iterations.keys():
             # Create Status object
             self.whiles_iterations[while_statement.lineno] = WhileStatus()
-            # Taints from while contition are only checked on the first iteration, subsequent iterations are tainted by inherited taints
-            # statement_taints = self.analyse_statement(while_statement.test, implicit)
-            # for taint in statement_taints:
-            #     taint.implicit = True
-
-            # Stores the taints from the while condition
-            # self.whiles_iterations[while_statement.lineno].original_taints = deepcopy(statement_taints)
 
         while_status = self.whiles_iterations.get(while_statement.lineno)
 
