@@ -237,12 +237,15 @@ class WhileStatus:
         Returns:
             - (bool) Whether the variables were modified or not
         """
-        tmp = self.variable_status != other
-        self.variable_status = deepcopy(other)
-        return tmp
+        if self.variable_status != other:
+            self.variable_status = deepcopy(other)
+            return True
+        return False
 
     def increment_iteration_count(self):
         self.iteration_count += 1
+        if self.iteration_count >= MAX_WHILE_ITERATIONS:
+            logger.warning(f'While loop reached maximum iterations ({MAX_WHILE_ITERATIONS})')
         return self.iteration_count
 
     def should_continue(self, variables: VariableTaints) -> bool:
@@ -391,18 +394,15 @@ class Analyser:
         # Analyse not entering the while
         self.handler_reference.add_analyser(deepcopy(self))
 
-        old_variables = deepcopy(self.variables)
-
         if while_statement.lineno not in self.whiles_iterations.keys():
             self.whiles_iterations[while_statement.lineno] = WhileStatus()
-
         while_status = self.whiles_iterations.get(while_statement.lineno)
 
         # if taints are still flowing through the while, analyse entering the while again (breanking condition)
         if while_status.should_continue(variables=self.variables):
-            # update ast.body to repeat the cycle one more time
+            # Creates ImplicitStatements with the implicit taints from the while condition
             while_flow = [ImplicitStatement(taints=statement_taints + implicit, statement=stmt) for stmt in while_statement.body]
-            # Resets AST to the state before the while was processed, plus one iteration of the while cycle
+            # Resets AST to the state before the while was processed and prepends the statements inside the while
             self.ast.body = while_flow + [while_statement] + self.ast.body
 
         # While stmt doesn't need to return a list of taints since it can never be used in an expression
@@ -549,6 +549,7 @@ class Analyser:
         for pattern in self.patterns:
             for variable_name in attributes_list:
                 # Pattern Sinks
+                # TODO: tambem preciso de passar os implicitos aqui? acho q nao; mas n tenho a certeza
                 self.match_sink(taints, pattern, variable_name, assignment.lineno)
 
         return taints
@@ -598,13 +599,15 @@ class Analyser:
                 if func_name in pattern.sources:
                     pattern_taints.append(Taint(func_name, call.lineno, pattern.vulnerability))
                 # Pattern Sinks
-                self.match_sink(argument_taints, pattern, func_name, call.lineno)
+                self.match_sink(argument_taints + implicit, pattern, func_name, call.lineno)
                 # Pattern Sanitizers
                 if func_name in pattern.sanitizers:  # esta funcão sanitiza o pattern onde estou
                     for taint in argument_taints:  # em todos os taints que chegam aos argumentos desta função
                         # Implicit taints are not sanitizable
+                        # FIXME:
                         if taint.implicit:
-                            continue
+                            # continue
+                            pass
                         if taint.pattern_name == pattern.vulnerability:  # se o taint se aplica ao pattern que estou a analisar
                             taint.add_sanitizer(func_name, call.lineno)  # adiciono o sanitizer ao taint
                             logger.info(f"L{call.lineno} Sanitized taint: {taint} for pattern: {pattern.vulnerability}")
