@@ -100,20 +100,7 @@ class Taint:
             self.sanitizer == other.sanitizer
 
     def __hash__(self):
-        # Combine hash values of individual attributes
-        hash_source = hash(self.source)
-        hash_source_line = hash(self.source_line)
-        hash_implicit = hash(self.implicit)
-        hash_pattern_name = hash(self.pattern_name)
-        hash_sanitizer = hash(tuple(self.sanitizer))
-
-        # XOR (^) is used to combine the hash values
-        combined_hash = (
-            hash_source ^ hash_source_line ^ hash_implicit ^
-            hash_pattern_name ^ hash_sanitizer
-        )
-
-        return combined_hash
+        return hash((self.source, self.source_line, self.implicit, self.pattern_name, tuple(self.sanitizer)))
 
     def __repr__(self) -> str:
         return f"Taint(Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.is_sanitized()}, Pattern: {self.pattern_name})"
@@ -227,7 +214,6 @@ class WhileStatus:
     def __init__(self) -> None:
         self.iteration_count = 0
         self.variable_status = None
-        self.original_taints: list[Taint] = []
 
     def modifiy_variables(self, other: VariableTaints) -> bool:
         """
@@ -395,21 +381,23 @@ class Analyser:
         # While(test=Compare(...), body=[...], type_ignores=[])
 
         # We can treat the while as an if block with an empty else
+        statement_taints = self.analyse_statement(while_statement.test, implicit)
+        for taint in statement_taints:
+            taint.implicit = True
 
         # First time entering the while
         if while_statement.lineno not in self.whiles_iterations.keys():
             # Create Status object
             self.whiles_iterations[while_statement.lineno] = WhileStatus()
             # Taints from while contition are only checked on the first iteration, subsequent iterations are tainted by inherited taints
-            statement_taints = self.analyse_statement(while_statement.test, implicit)
-            for taint in statement_taints:
-                taint.implicit = True
+            # statement_taints = self.analyse_statement(while_statement.test, implicit)
+            # for taint in statement_taints:
+            #     taint.implicit = True
 
             # Stores the taints from the while condition
-            self.whiles_iterations[while_statement.lineno].original_taints = deepcopy(statement_taints)
+            #self.whiles_iterations[while_statement.lineno].original_taints = deepcopy(statement_taints)
 
         while_status = self.whiles_iterations.get(while_statement.lineno)
-        implicit_taints = while_status.original_taints + implicit
 
 
         # Analyse not entering the while
@@ -419,7 +407,7 @@ class Analyser:
         # if taints are still flowing through the while, analyse entering the while again (breanking condition)
         if while_status.should_continue(variables=self.variables):
             # Creates ImplicitStatements with the implicit taints from the while condition
-            while_flow = [ImplicitStatement(taints=implicit_taints, statement=deepcopy(stmt)) for stmt in while_statement.body]
+            while_flow = [ImplicitStatement(taints=statement_taints + implicit, statement=stmt) for stmt in while_statement.body]
             # Resets AST to the state before the while was processed and prepends the statements inside the while
             flow = while_flow + [while_statement]
             logger.debug(f'L{while_statement.lineno} While: preppending flow: {[stmt.lineno for stmt in flow]}')
@@ -453,8 +441,8 @@ class Analyser:
             - list[Taint]: The taints found in the variable
         """
         # FIXME:
-        taints = deepcopy(implicit)
-        #taints = []
+        taints = []
+        #taints = deepcopy(implicit)
 
         # Name(id='a', ctx=Load())
         # Variable was never assigned a value [Uninitialized]
@@ -551,9 +539,7 @@ class Analyser:
         # TODO?: Handle multiple targets
         assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
 
-        # FIXME:
-        taints = deepcopy(implicit)
-        #taints = []
+        taints = []
 
         # Analyse the right side of the assignment
         taints.extend(self.analyse_statement(assignment.value, implicit))
@@ -567,7 +553,7 @@ class Analyser:
             variable_taint = variable_taint.variables[attribute]
 
         # Filter out repeated taints
-        taints_to_assign = list(set(taints))
+        taints_to_assign = list(set(taints+implicit))
 
         variable_taint.assign_taints(taints_to_assign)
         logger.debug(f'L{assignment.lineno} {attributes_list}: {taints}')
@@ -576,7 +562,7 @@ class Analyser:
             for variable_name in attributes_list:
                 # Pattern Sinks
                 # TODO: tambem preciso de passar os implicitos aqui? acho q nao; mas n tenho a certeza
-                self.match_sink(taints, pattern, variable_name, assignment.lineno)
+                self.match_sink(taints_to_assign, pattern, variable_name, assignment.lineno)
 
         return taints
 
