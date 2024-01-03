@@ -88,8 +88,7 @@ class Taint:
             raise ValueError(f'Cannot merge different taints')
         for sanitizer in other.sanitizer:
             if sanitizer not in self.sanitizer:
-                # TODO: this might cause problems later because the sanitizer can be a list
-                self.sanitizer.append(deepcopy(sanitizer))
+                self.sanitizer.append(sanitizer)
 
     def is_sanitized(self) -> bool:
         return len(self.sanitizer) > 0
@@ -144,7 +143,7 @@ class VariableTaints:
                         taint.merge_sanitizers(new_taint)
                         break
             else:
-                self.taints.append(deepcopy(new_taint))
+                self.taints.append(new_taint)
 
     def get_taints(self) -> list[Taint]:
         """
@@ -543,7 +542,8 @@ class Analyser:
         """
         # Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=''))
         # Assign(targets=[Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())], value=Constant(value=0))
-        # TODO?: Handle multiple targets
+
+        # Handling multiple targets is not implemented
         assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
 
         if IMPLICITS_TO_EXPRESSIONS:
@@ -571,7 +571,6 @@ class Analyser:
         for pattern in self.patterns:
             for variable_name in attributes_list:
                 # Pattern Sinks
-                # TODO: tambem preciso de passar os implicitos aqui? acho q nao; mas n tenho a certeza
                 self.match_sink(taints_to_assign, pattern, variable_name, assignment.lineno)
 
         return taints
@@ -634,10 +633,6 @@ class Analyser:
                 # Pattern Sanitizers
                 if func_name in pattern.sanitizers:  # esta funcão sanitiza o pattern onde estou
                     for taint in argument_taints:  # em todos os taints que chegam aos argumentos desta função
-                        # Implicit taints are not sanitizable
-                        # FIXME:
-                        if taint.implicit:
-                            pass
                         if taint.pattern_name == pattern.vulnerability:  # se o taint se aplica ao pattern que estou a analisar
                             taint.add_sanitizer(func_name, call.lineno)  # adiciono o sanitizer ao taint
                             logger.info(f"L{call.lineno} Sanitized taint: {taint} for pattern: {pattern.vulnerability}")
@@ -739,8 +734,6 @@ class Analyser_Handler():
                 if vuln.taint.is_sanitized():
                     if vuln.taint.sanitizer not in vuln_out['sanitized_flows']:
                         vuln_out['sanitized_flows'].append(list(vuln.taint.sanitizer))
-                    else:
-                        logger.warning(f'Vulnerability {vuln.name} has repeated sanitizers; there might be a bug')
                 else:
                     vuln_out['unsanitized_flows'] = 'yes'
             vulnerabilities.append(vuln_out)
