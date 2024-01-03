@@ -6,6 +6,9 @@ import ast
 import os
 from copy import deepcopy
 
+# https://mattermost.rnl.tecnico.ulisboa.pt/ssof23/pl/jbfhkhw1g7b6tpsq94ua9tcthh
+IMPLICITS_TO_EXPRESSIONS = True
+
 # Safeguard to prevent infinite loops
 MAX_WHILE_ITERATIONS = 50
 
@@ -323,7 +326,10 @@ class Analyser:
 
         implicit_taints = implicit + implicit_statement.taints
 
-        taints = []
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
         taints.extend(self.analyse_statement(implicit_statement.statement, implicit_taints))
         logger.debug(f'L{implicit_statement.statement.lineno} Implicit: {taints}')
         return taints
@@ -349,7 +355,10 @@ class Analyser:
             - list[Taint]: The taints found in the left and the right side of the compare statement
         """
         # Compare(left=Name(id='c', ctx=Load()), ops=[Lt()], comparators=[Constant(value=3)])
-        taints = []
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
         taints.extend(self.analyse_statement(compare.left, implicit))
         for comparator in compare.comparators:
             taints.extend(self.analyse_statement(comparator, implicit))
@@ -415,7 +424,10 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the left and the right side of the binary operation
         """
-        taints = []
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
         taints.extend(self.analyse_statement(bin_op.left, implicit) + self.analyse_statement(bin_op.right, implicit))
         logger.debug(f'L{bin_op.lineno} {type(bin_op.op)}: {taints}')
         return taints
@@ -431,9 +443,10 @@ class Analyser:
         Returns:
             - list[Taint]: The taints found in the variable
         """
-        # FIXME:
-        # taints = []
-        taints = deepcopy(implicit)
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
 
         # Name(id='a', ctx=Load())
         # Variable was never assigned a value [Uninitialized]
@@ -464,7 +477,10 @@ class Analyser:
             - list[Taint]: The taints found in the attribute
         """
         # Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())
-        taints = []
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
 
         # analyse the other attributes [c]
         for taint in self.analyse_statement(attribute.value, implicit):
@@ -530,7 +546,10 @@ class Analyser:
         # TODO?: Handle multiple targets
         assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
 
-        taints = []
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
 
         # Analyse the right side of the assignment
         taints.extend(self.analyse_statement(assignment.value, implicit))
@@ -566,7 +585,12 @@ class Analyser:
             - list[Taint]: The taints found in the expression
         """
         # Expr(value=Call(func=Name(id='e', ctx=Load()), args=[Name(id='b', ctx=Load())], keywords=[]))
-        taints = self.analyse_statement(expression.value, implicit)
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
+
+        taints.extend(self.analyse_statement(expression.value, implicit))
         logger.debug(f'L{expression.lineno}: {taints}')
         return taints
 
@@ -580,6 +604,10 @@ class Analyser:
         """
         # Call(func=Name(id='c', ctx=Load()), args=[], keywords=[])
         # Call(func=Attribute(value=Name(id='b', ctx=Load()), attr='m', ctx=Load()), args=[], keywords=[])
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
 
         # Taints from the arguments
         argument_taints = []
@@ -614,7 +642,7 @@ class Analyser:
                             taint.add_sanitizer(func_name, call.lineno)  # adiciono o sanitizer ao taint
                             logger.info(f"L{call.lineno} Sanitized taint: {taint} for pattern: {pattern.vulnerability}")
 
-        taints = pattern_taints + argument_taints + attribute_taints
+        taints.extend(pattern_taints + argument_taints + attribute_taints)
         logger.debug(f'L{call.lineno} {func_name}: {taints}')
         return taints
 
