@@ -720,7 +720,7 @@ class Analyser_Handler():
                 groups.append([vuln])
 
         if len(groups) == 0:
-            return json.dumps(['none'])
+            return json.dumps([])
 
         vulnerabilities = []
         for g in groups:

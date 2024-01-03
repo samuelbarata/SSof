@@ -1,16 +1,16 @@
 #!/bin/python3
 
-import sys, json
+import json
 import argparse
 
 
 class bcolors:
     # https://stackoverflow.com/questions/4842424/list-of-ansi-color-escape-sequences
-    GREEN =     '\033[92m'
-    YELLOW =    '\033[93m'
-    RED =       '\033[91m'
-    ENDC =      '\033[0m'
-    BOLD =      '\033[1m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
 
@@ -22,7 +22,7 @@ def is_list_of_strings(ll: list) -> bool:
     return all(map(lambda x: isinstance(x, str), ll))
 
 
-### a flow is a list of tuples (string, int)
+# a flow is a list of tuples (string, int)
 def is_flow(flow) -> bool:
     return isinstance(flow, list) and \
         all(map(lambda x: is_instruction(x), flow))
@@ -32,7 +32,7 @@ def is_list_of_flows(ll: list) -> bool:
     return all(map(lambda x: is_flow(x), ll))
 
 
-### an instruction is a tuple (string, int)
+# an instruction is a tuple (string, int)
 def is_instruction(pp: tuple) -> bool:
     return len(pp) == 2 and \
         isinstance(pp[0], str) and \
@@ -50,7 +50,7 @@ def is_same_flow(flow1, flow2):
         f = flow1[0]
         if f in flow2:
             i = flow2.index(f)
-            return is_same_flow(flow1[1:], flow2[:i] + flow2[i+1:])
+            return is_same_flow(flow1[1:], flow2[:i] + flow2[i + 1:])
         else:
             return False
 
@@ -70,7 +70,7 @@ def is_same_list_of_flows(l1, l2):
                 return is_same_list_of_flows(l1[1:], l2)
 
 
-### Check if json object is a valid pattern
+# Check if json object is a valid pattern
 def is_pattern(json_obj) -> bool:
     assert match_keys(['vulnerability', 'sources', 'sanitizers', 'sinks', 'implicit'], json_obj), set(json_obj.keys())
 
@@ -91,7 +91,7 @@ def is_pattern(json_obj) -> bool:
     return True
 
 
-### Check if json object is a valid vulnerability output
+# Check if json object is a valid vulnerability output
 def is_vulnerability(json_obj) -> bool:
     assert match_keys(['vulnerability', 'source', 'sink', 'unsanitized_flows', 'sanitized_flows'], json_obj), set(json_obj.keys())
 
@@ -110,12 +110,12 @@ def is_vulnerability(json_obj) -> bool:
     return True
 
 
-### 2 vulnerabilities have the same name if they differ in their numbering
-##  v == v_3
-##  v_1 == v_2
-##  v_1_1 == v_1_2
-##  v_1_1 != v_1
-##  v_1_1 != v_2_1
+# 2 vulnerabilities have the same name if they differ in their numbering
+# v == v_3
+# v_1 == v_2
+# v_1_1 == v_1_2
+# v_1_1 != v_1
+# v_1_1 != v_2_1
 def is_same_vulnerability_name(name1, name2):
     pos1 = name1.rfind('_')
     pos2 = name2.rfind('_')
@@ -130,8 +130,8 @@ def is_same_vulnerability_name(name1, name2):
 # assert is_same_vulnerability_name('v_1_1', 'v_2_1') == False
 
 
-### 2 vulnerabilities are the same if they match in everything,
-##  regardless of the order of the sanitized_flows
+# 2 vulnerabilities are the same if they match in everything,
+# regardless of the order of the sanitized_flows
 def is_same_vulnerability(v1, v2) -> bool:
     return is_same_vulnerability_name(v1['vulnerability'], v2['vulnerability']) and \
         v1['source'] == v2['source'] and \
@@ -149,7 +149,7 @@ def is_vulnerability_in_target(vulnerability, target_list):
     return False, target_list
 
 
-### Check if all patterns in filename are valid patterns
+# Check if all patterns in filename are valid patterns
 def validate_patterns_file(filename: str, silent) -> bool:
     with open(filename, 'r') as f:
         patterns_list = json.loads(f.read())
@@ -167,27 +167,26 @@ def validate_patterns_file(filename: str, silent) -> bool:
         print(f"{bcolors.GREEN}[+] All patterns of file {filename} are well defined{bcolors.ENDC}")
 
 
-### Check if all outputs in filename are valid vulnerability outputs
+# Check if all outputs in filename are valid vulnerability outputs
 def validate_output_file(filename: str, silent):
     with open(filename, 'r') as f:
         output_list = json.loads(f.read())
     assert isinstance(output_list, list)
 
-    if output_list[0] != 'none':
-        for json_obj in output_list:
-            try:
-                assert is_vulnerability(json_obj)
-            except Exception as e:
-                print(f"\n{bcolors.RED}[-] Incorrect Output in file {filename}:\n{e}\n{json_obj}{bcolors.ENDC}\n")
-                exit(1)
+    for json_obj in output_list:
+        try:
+            assert is_vulnerability(json_obj)
+        except Exception as e:
+            print(f"\n{bcolors.RED}[-] Incorrect Output in file {filename}:\n{e}\n{json_obj}{bcolors.ENDC}\n")
+            exit(1)
     if not silent:
         print(f"{bcolors.GREEN}[+] All outputs of file {filename} are well defined{bcolors.ENDC}")
 
 
-### Check if output in obtained file is the same as in target file
+# Check if output in obtained file is the same as in target file
 def check_output(obtained, target, silent):
     good = []
-    missing = []
+    wrong = []
 
     with open(obtained, 'r') as f:
         output_list = json.loads(f.read())
@@ -195,38 +194,32 @@ def check_output(obtained, target, silent):
     with open(target, 'r') as f:
         target_list = json.loads(f.read())
 
-    if output_list == ["none"] and target_list == ["none"]:
-        return True
+    for output in output_list:
+        res, target_list = is_vulnerability_in_target(output, target_list)
+        if res:
+            good.append(output)
+        else:
+            wrong.append(output)
 
-    if output_list == ["none"] and target_list != ["none"]:
-        for v in target_list:
-            missing.append(v)
-    else:
-        for output in output_list:
-            res, target_list = is_vulnerability_in_target(output, target_list)
-            if res:
-                good.append(output)
-            else:
-                missing.append(output)
     if not silent:
         print(f"\nGOOD FLOWS\n{good}")
-        print(f"{bcolors.RED}\nMISSING FLOWS\n{missing}{bcolors.ENDC}")
-        print(f"{bcolors.YELLOW}\nWRONG FLOWS\n{target_list}{bcolors.ENDC}")
+        print(f"{bcolors.RED}\nMISSING FLOWS\n{target_list}{bcolors.ENDC}")
+        print(f"{bcolors.YELLOW}\nWRONG FLOWS\n{wrong}{bcolors.ENDC}")
 
-    return len(missing) == 0 and len(target_list) == 0
+    return len(wrong) == 0 and len(target_list) == 0
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--pattern", '-p', help="Validate <pattern> file", default = False)
-parser.add_argument("--output", '-o', help="Validate <output> file", default = False)
-parser.add_argument("--target", '-t', help="Check <output> vs <target_file>", default = False)
-parser.add_argument("--silent", '-s', help="silent output", action='store_true', default = False)
+parser.add_argument("--pattern", '-p', help="Validate <pattern> file", default=False)
+parser.add_argument("--output", '-o', help="Validate <output> file", default=False)
+parser.add_argument("--target", '-t', help="Check <output> vs <target_file>", default=False)
+parser.add_argument("--silent", '-s', help="silent output", action='store_true', default=False)
 
-args=parser.parse_args()
+args = parser.parse_args()
 
 silent = vars(args)['silent']
 
 if not silent:
-    print("\n" + "*"*80)
+    print("\n" + "*" * 80)
 if vars(args)['pattern']:
     validate_patterns_file(vars(args)['pattern'], silent)
 if vars(args)['output']:
