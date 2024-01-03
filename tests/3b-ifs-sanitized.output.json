@@ -30,7 +30,14 @@
             7
         ],
         "unsanitized_flows": "yes",
-        "sanitized_flows": []
+        "sanitized_flows": [
+            [
+                [
+                    "sanitizer", 
+                    6
+                ]
+            ]
+        ]
     },
     {
         "vulnerability": "B_2",
