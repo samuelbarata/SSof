@@ -307,9 +307,30 @@ class Analyser:
                 return self.implicit_statement(statement, implicit)
             case ast.While():
                 return self.while_statement(statement, implicit)
+            case ast.Tuple():
+                return self.tuple_object(statement, implicit)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
+
+    def tuple_object(self, tuple_object: ast.Tuple, implicit: list[Taint]) -> list[Taint]:
+        """
+        Parameters:
+            - tuple_object (ast.Tuple): The tuple to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the tuple elements
+
+        Returns:
+            - list[Taint]: The taints found in the tuple
+        """
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
+
+        for element in tuple_object.elts:
+            taints.extend(self.analyse_statement(element, implicit))
+        logger.debug(f'L{tuple_object.lineno} Tuple: {taints}')
+        return taints
 
     def implicit_statement(self, implicit_statement: ImplicitStatement, implicit: list[Taint]) -> list[Taint]:
         """
