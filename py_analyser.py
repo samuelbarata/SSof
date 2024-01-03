@@ -432,8 +432,8 @@ class Analyser:
             - list[Taint]: The taints found in the variable
         """
         # FIXME:
-        taints = []
-        # taints = deepcopy(implicit)
+        # taints = []
+        taints = deepcopy(implicit)
 
         # Name(id='a', ctx=Load())
         # Variable was never assigned a value [Uninitialized]
