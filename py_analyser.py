@@ -291,6 +291,8 @@ class Analyser:
                 return self.call(statement, implicit)
             case ast.Constant():
                 return []  # A constant is never tainted
+            case ast.BoolOp():
+                return self.bool_op(statement, implicit)
             case ast.BinOp():
                 return self.bin_op(statement, implicit)
             case ast.Attribute():
@@ -312,6 +314,25 @@ class Analyser:
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
+
+    def bool_op(self, bool_op: ast.BoolOp, implicit: list[Taint]) -> list[Taint]:
+        """
+        Parameters:
+            - bool_op (ast.BoolOp): The boolean operation to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the boolean operation
+
+        Returns:
+            - list[Taint]: The taints found in the boolean operation
+        """
+        # BoolOp(op=And(), values=[Compare(...), Compare(...)])
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
+        for value in bool_op.values:
+            taints.extend(self.analyse_statement(value, implicit))
+        logger.debug(f'L{bool_op.lineno} {type(bool_op.op)}: {taints}')
+        return taints
 
     def tuple_object(self, tuple_object: ast.Tuple, implicit: list[Taint]) -> list[Taint]:
         """
