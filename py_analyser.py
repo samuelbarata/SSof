@@ -318,9 +318,25 @@ class Analyser:
                 return self.continue_statement(statement, implicit)
             case ast.For():
                 return self.for_statement(statement, implicit)
+            case ast.AugAssign():
+                return self.aug_assign(statement, implicit)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
+
+    def aug_assign(self, aug_assign: ast.AugAssign, implicit: list[Taint]) -> list[Taint]:
+        """
+        Parameters:
+            - aug_assign (ast.AugAssign): The augmented assignment to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the augmented assignment
+
+        Returns:
+            - list[Taint]: The taints found in the augmented assignment
+        """
+        # AugAssign(target=Name(id='a', ctx=Store()), op=Add(), value=Constant(value=1))
+        stmt = ast.Assign(targets=[aug_assign.target], value=ast.BinOp(left=aug_assign.target, op=aug_assign.op, right=aug_assign.value, lineno=aug_assign.lineno), lineno=aug_assign.lineno)
+        stmt = ImplicitStatement(taints=implicit, statement=stmt)
+        self.ast.body.insert(0, stmt)
 
     def break_statement(self, break_statement: ast.Break, implicit: list[Taint]) -> list[Taint]:
         """
@@ -488,8 +504,10 @@ class Analyser:
             self.cycles_iterations[for_statement.lineno] = CycleStatus()
 
         for_status = self.cycles_iterations.get(for_statement.lineno)
-
-        self.handler_reference.add_analyser(deepcopy(self), f'Exiting For block from line {for_statement.lineno} after {for_status.iteration_count} iterations')
+        # Analyse not entering/exiting the while
+        else_analyser = deepcopy(self)
+        else_analyser.ast.body = [ImplicitStatement(taints=iter_taints + implicit, statement=stmt) for stmt in for_statement.orelse] + else_analyser.ast.body
+        self.handler_reference.add_analyser(else_analyser, f'Exiting For block from line {for_statement.lineno} after {for_status.iteration_count} iterations')
 
         for_assign = ast.Assign(targets=[for_statement.target], value=for_statement.iter, lineno=for_statement.lineno)
 
@@ -519,8 +537,10 @@ class Analyser:
 
         while_status = self.cycles_iterations.get(while_statement.lineno)
 
-        # Analyse not entering the while
-        self.handler_reference.add_analyser(deepcopy(self), f'Exiting While block from line {while_statement.lineno} after {while_status.iteration_count} iterations')
+        # Analyse not entering/exiting the while
+        else_analyser = deepcopy(self)
+        else_analyser.ast.body = [ImplicitStatement(taints=statement_taints + implicit, statement=stmt) for stmt in while_statement.orelse] + else_analyser.ast.body
+        self.handler_reference.add_analyser(else_analyser, f'Exiting While block from line {while_statement.lineno} after {while_status.iteration_count} iterations')
 
         # if taints are still flowing through the while, analyse entering the while again (breanking condition)
         if while_status.should_continue(variables=self.variables):
