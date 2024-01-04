@@ -155,8 +155,9 @@ class VariableTaints:
         return ret
 
     def __eq__(self, other: object) -> bool:
+        # We convert it to set to compare sice the order of the taints doesn't matter
         return isinstance(other, VariableTaints) and \
-            self.taints == other.taints and \
+            set(self.taints) == set(other.taints) and \
             self.initialized == other.initialized and \
             self.variables == other.variables
 
@@ -660,9 +661,7 @@ class Analyser:
         """
         # Assign(targets=[Name(id='a', ctx=Store())], value=Constant(value=''))
         # Assign(targets=[Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())], value=Constant(value=0))
-
-        # Handling multiple targets is not implemented
-        assert len(assignment.targets) == 1, f'Assignments with multiple targets are not implemented'
+        # Assign(targets=[Tuple(elts=[Name(id='a', ctx=Store()), Name(id='b', ctx=Store())], ctx=Store())], value=Tuple(elts=[Constant(value=True), Call(func=Name(id='source', ctx=Load()), args=[], keywords=[])], ctx=Load()))
 
         if IMPLICITS_TO_EXPRESSIONS:
             taints = deepcopy(implicit)
@@ -671,20 +670,29 @@ class Analyser:
 
         # Analyse the right side of the assignment
         taints.extend(self.analyse_statement(assignment.value, implicit))
-        attributes_list = self.get_name(assignment.targets[0])
 
-        variable_taint = self.variables
-        for attribute in attributes_list:
-            if attribute not in variable_taint.variables:  # undefined variable
-                variable_taint.variables[attribute] = VariableTaints()
+        target_list = []
+        for target in assignment.targets:
+            if isinstance(target, ast.Tuple):
+                target_list.extend(target.elts)
+            else:
+                target_list.append(target)
 
-            variable_taint = variable_taint.variables[attribute]
+        for target in target_list:
+            attributes_list = self.get_name(target)
 
-        # Filter out repeated taints
-        taints_to_assign = list(set(taints + implicit))
+            variable_taint = self.variables
+            for attribute in attributes_list:
+                if attribute not in variable_taint.variables:  # undefined variable
+                    variable_taint.variables[attribute] = VariableTaints()
 
-        variable_taint.assign_taints(taints_to_assign)
-        logger.debug(f'L{assignment.lineno} {attributes_list}: {taints}')
+                variable_taint = variable_taint.variables[attribute]
+
+            # Filter out repeated taints
+            taints_to_assign = list(set(taints + implicit))
+
+            variable_taint.assign_taints(taints_to_assign)
+            logger.debug(f'L{assignment.lineno} {attributes_list}: {taints}')
 
         for pattern in self.patterns:
             for variable_name in attributes_list:
