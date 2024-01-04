@@ -318,9 +318,25 @@ class Analyser:
                 return self.continue_statement(statement, implicit)
             case ast.For():
                 return self.for_statement(statement, implicit)
+            case ast.AugAssign():
+                return self.aug_assign(statement, implicit)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
+
+    def aug_assign(self, aug_assign: ast.AugAssign, implicit: list[Taint]) -> list[Taint]:
+        """
+        Parameters:
+            - aug_assign (ast.AugAssign): The augmented assignment to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the augmented assignment
+
+        Returns:
+            - list[Taint]: The taints found in the augmented assignment
+        """
+        # AugAssign(target=Name(id='a', ctx=Store()), op=Add(), value=Constant(value=1))
+        stmt = ast.Assign(targets=[aug_assign.target], value=ast.BinOp(left=aug_assign.target, op=aug_assign.op, right=aug_assign.value, lineno=aug_assign.lineno), lineno=aug_assign.lineno)
+        stmt = ImplicitStatement(taints=implicit, statement=stmt)
+        self.ast.body.insert(0, stmt)
 
     def break_statement(self, break_statement: ast.Break, implicit: list[Taint]) -> list[Taint]:
         """
