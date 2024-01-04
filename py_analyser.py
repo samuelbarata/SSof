@@ -137,7 +137,7 @@ class VariableTaints:
         """
         Return the taints of the variable and all the taints of its attributes
         """
-        ret = self.taints
+        ret = deepcopy(self.taints)
         for var in self.variables:
             ret.extend(self.variables[var].get_taints())
         return ret
@@ -779,6 +779,9 @@ class Analyser:
             else:
                 target_list.append(target)
 
+        # Filter out repeated taints
+        taints_to_assign = list(set(taints + implicit))
+
         for target in target_list:
             attributes_list = self.get_name(target)
 
@@ -789,10 +792,7 @@ class Analyser:
 
                 variable_taint = variable_taint.variables[attribute]
 
-            # Filter out repeated taints
-            taints_to_assign = list(set(taints + implicit))
-
-            variable_taint.assign_taints(taints_to_assign)
+            variable_taint.assign_taints(deepcopy(taints_to_assign))
             logger.debug(f'L{assignment.lineno} {attributes_list}: {taints}')
 
         for pattern in self.patterns:
