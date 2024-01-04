@@ -6,4 +6,4 @@ else:
     e=0
 sink(e)
 
-# Altough the variable is rewritten on both branches, there is an implicit flow
+# although the variable is rewritten on both branches, there is an implicit flow

@@ -6,4 +6,4 @@ k = sanitizerC(sanitizerB(sanitizerA(a)))
 sink(k)
 sink(sanitizerA(k))
 
-# sanitizers through sanitiizers
+# sanitizers through sanitizers

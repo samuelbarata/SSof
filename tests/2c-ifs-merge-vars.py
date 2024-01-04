@@ -4,4 +4,4 @@ else:
     a=2
 sink(a)
 
-# variable is always initialized exitinig the if/else
+# variable is always initialized exiting the if/else

@@ -7,4 +7,4 @@ else:
     e=0
 sink(e)
 
-# Basic implicit flow
+# basic implicit flow
