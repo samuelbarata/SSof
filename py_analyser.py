@@ -21,6 +21,16 @@ LOG_LEVELS = {
 }
 
 
+def hash_set(s):
+    """
+    Return a hash for a set of flows
+    """
+    h = 0
+    for k in s:
+        h += hash(k)
+    return hash(h)
+
+
 def make_folder_exist(folder):
     """
     Creates the specified folder if it doesn't exist
@@ -65,7 +75,7 @@ class Taint:
         self.source_line = source_line
         self.implicit = implicit
         self.pattern_name = pattern
-        self.sanitizer = []
+        self.sanitizer: set = set()
 
     def add_sanitizer(self, sanitizer: str, line: int):
         """
@@ -76,8 +86,7 @@ class Taint:
             - line (int): The line where the sanitizer is called
         """
         sanitizer_tuple = (sanitizer, line)
-        if sanitizer_tuple not in self.sanitizer:
-            self.sanitizer.append(sanitizer_tuple)
+        self.sanitizer.add(sanitizer_tuple)
 
     def is_sanitized(self) -> bool:
         return len(self.sanitizer) > 0
@@ -88,10 +97,10 @@ class Taint:
             self.source_line == other.source_line and \
             self.implicit == other.implicit and \
             self.pattern_name == other.pattern_name and \
-            set(self.sanitizer) == set(other.sanitizer)
+            self.sanitizer == other.sanitizer
 
     def __hash__(self):
-        return hash((self.source, self.source_line, self.implicit, self.pattern_name, tuple(self.sanitizer)))
+        return hash((self.source, self.source_line, self.implicit, self.pattern_name, hash_set(self.sanitizer)))
 
     def __repr__(self) -> str:
         return f"Taint(Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.is_sanitized()}, Pattern: {self.pattern_name})"
@@ -824,6 +833,7 @@ class Analyser_Handler():
         Returns:
             - str: The results of the analysis in JSON format
         """
+
         if logger.isEnabledFor(logging.DEBUG):
             self.display_logs()
 
@@ -862,12 +872,20 @@ class Analyser_Handler():
                         'unsanitized_flows': 'no',
                         'sanitized_flows': []
                         }
+
+            inserted_flows = set()
+            sanitized_flows = []
             for vuln in g:
                 if vuln.taint.is_sanitized():
-                    if vuln.taint.sanitizer not in vuln_out['sanitized_flows']:
-                        vuln_out['sanitized_flows'].append(list(vuln.taint.sanitizer))
+                    h = hash_set(vuln.taint.sanitizer)
+                    if h in inserted_flows:
+                        pass
+                    else:
+                        inserted_flows.add(h)
+                        sanitized_flows.append(tuple(vuln.taint.sanitizer))
                 else:
                     vuln_out['unsanitized_flows'] = 'yes'
+            vuln_out['sanitized_flows'] = sanitized_flows
             vulnerabilities.append(vuln_out)
 
         return json.dumps(vulnerabilities, indent=4)
