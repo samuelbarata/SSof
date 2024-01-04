@@ -20,6 +20,7 @@ LOG_LEVELS = {
     'CRITICAL': logging.CRITICAL,
 }
 
+
 def hash_set(s):
     """
     Return a hash for a set of flows
@@ -28,6 +29,7 @@ def hash_set(s):
     for k in s:
         h += hash(k)
     return hash(h)
+
 
 def make_folder_exist(folder):
     """
