@@ -314,9 +314,30 @@ class Analyser:
                 return self.formatted_value(statement, implicit)
             case ast.Import():
                 return self.import_statement(statement, implicit)
+            case ast.NamedExpr():
+                return self.named_expr(statement, implicit)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
+
+    def named_expr(self, named_expr: ast.NamedExpr, implicit: list[Taint]) -> list[Taint]:
+        """
+        Parameters:
+            - named_expr (ast.NamedExpr): The named expression to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the named expression
+
+        Returns:
+            - list[Taint]: The taints found in the named expression
+        """
+        # NamedExpr(target=Name(id='x', ctx=Store()),value=Constant(value=4))
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
+
+        taints.extend(self.analyse_statement(ast.Assign(targets=[named_expr.target], value=named_expr.value, lineno=named_expr.lineno), implicit))
+        return taints
+
     def import_statement(self, import_statement: ast.Import, implicit: list[Taint]) -> list[Taint]:
         """
         Parameters:
@@ -339,6 +360,7 @@ class Analyser:
         for alias in import_statement.names:
             # Create an assign statement for each import to mark it as initialized
             assign = ast.Assign(targets=[ast.Name(id=alias.name, ctx=ast.Store())], value=ast.Constant(value=None), lineno=-1)
+            assign = ImplicitStatement(taints=implicit, statement=assign)
             self.ast.body.insert(0, assign)
         return taints
 
@@ -360,7 +382,6 @@ class Analyser:
         taints.extend(self.analyse_statement(formatted_value.value, implicit))
         logger.debug(f'L{formatted_value.lineno} FormattedValue: {taints}')
         return taints
-
 
     def joined_str(self, joined_str: ast.JoinedStr, implicit: list[Taint]) -> list[Taint]:
         """
