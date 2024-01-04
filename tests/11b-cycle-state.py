@@ -10,4 +10,6 @@ for t in a:
 
 sink(a)
 
+# for doesn't converge
+
 # Inspired by T04-05/perpetual-swap.py
