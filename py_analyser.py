@@ -10,7 +10,7 @@ from copy import deepcopy
 IMPLICITS_TO_EXPRESSIONS = True
 
 # Safeguard to prevent infinite loops
-MAX_CYCLE_ITERATIONS = 50
+MAX_CYCLE_ITERATIONS = 30
 
 LOG_LEVELS = {
     'INFO': logging.INFO,
@@ -79,17 +79,6 @@ class Taint:
         if sanitizer_tuple not in self.sanitizer:
             self.sanitizer.append(sanitizer_tuple)
 
-    def merge_sanitizers(self, other):
-        """
-        Merges the sanitizers of two taints
-        """
-        if self != other:
-            logger.critical(f'Cannot merge different taints')
-            raise ValueError(f'Cannot merge different taints')
-        for sanitizer in other.sanitizer:
-            if sanitizer not in self.sanitizer:
-                self.sanitizer.append(sanitizer)
-
     def is_sanitized(self) -> bool:
         return len(self.sanitizer) > 0
 
@@ -134,16 +123,6 @@ class VariableTaints:
         """
         self.taints = taints
         self.initialized = True
-
-    def merge_taints(self, taints: list[Taint]):
-        for new_taint in taints:
-            if new_taint in self.taints:
-                for taint in self.taints:
-                    if taint == new_taint:
-                        taint.merge_sanitizers(new_taint)
-                        break
-            else:
-                self.taints.append(new_taint)
 
     def get_taints(self) -> list[Taint]:
         """
