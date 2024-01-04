@@ -12,4 +12,4 @@ q = f"SELECT * FROM users WHERE user='{u}' AND password='{p}'"
 
 cursor.execute(q)
 
-# real sql injection scenario
+# test imports; real sql injection scenario
