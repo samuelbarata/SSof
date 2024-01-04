@@ -663,8 +663,6 @@ class Analyser:
         # Assign(targets=[Attribute(value=Name(id='c', ctx=Load()), attr='e', ctx=Store())], value=Constant(value=0))
         # Assign(targets=[Tuple(elts=[Name(id='a', ctx=Store()), Name(id='b', ctx=Store())], ctx=Store())], value=Tuple(elts=[Constant(value=True), Call(func=Name(id='source', ctx=Load()), args=[], keywords=[])], ctx=Load()))
 
-        # Handling multiple targets is not implemented
-
         if IMPLICITS_TO_EXPRESSIONS:
             taints = deepcopy(implicit)
         else:
