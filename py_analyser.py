@@ -10,7 +10,7 @@ from copy import deepcopy
 IMPLICITS_TO_EXPRESSIONS = True
 
 # Safeguard to prevent infinite loops
-MAX_WHILE_ITERATIONS = 50
+MAX_CYCLE_ITERATIONS = 50
 
 LOG_LEVELS = {
     'INFO': logging.INFO,
@@ -204,7 +204,7 @@ class ImplicitStatement:
             self.statement == other.statement
 
 
-class WhileStatus:
+class CycleStatus:
     """
     Structure to Store the while status
 
@@ -234,12 +234,12 @@ class WhileStatus:
 
     def increment_iteration_count(self):
         self.iteration_count += 1
-        if self.iteration_count >= MAX_WHILE_ITERATIONS:
-            logger.warning(f'While loop reached maximum iterations ({MAX_WHILE_ITERATIONS})')
+        if self.iteration_count >= MAX_CYCLE_ITERATIONS:
+            logger.warning(f'Loop reached maximum iterations ({MAX_CYCLE_ITERATIONS})')
         return self.iteration_count
 
     def should_continue(self, variables: VariableTaints) -> bool:
-        return (self.increment_iteration_count() < MAX_WHILE_ITERATIONS and self.modifiy_variables(variables))
+        return (self.increment_iteration_count() < MAX_CYCLE_ITERATIONS and self.modifiy_variables(variables))
 
 
 class Analyser:
@@ -251,7 +251,7 @@ class Analyser:
         self.vulnerabilities: list[Vulnerability] = []
         logger.debug(f'Added patterns to Analyser:\n{self.patterns}')
         self.handler_reference: Analyser_Handler = None
-        self.whiles_iterations: dict[int, WhileStatus] = {}
+        self.cycles_iterations: dict[int, CycleStatus] = {}
         self.debug_message = 'Analyser has not been run yet'
 
     def analyse(self, message=''):
@@ -311,6 +311,8 @@ class Analyser:
                 return self.while_statement(statement, implicit)
             case ast.Tuple():
                 return self.tuple_object(statement, implicit)
+            case ast.For():
+                return self.for_statement(statement, implicit)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
@@ -427,6 +429,35 @@ class Analyser:
         # If stmt doesn't need to return a list of taints since it can never be used in an expression
         return []
 
+    def for_statement(self, for_statement: ast.For, implicit: list[Taint]) -> list[Taint]:
+        # For(target=Name(id='a', ctx=Store()), iter=Call(func=Name(id='range', ctx=Load()), args=[Call(func=Name(id='len', ctx=Load()), args=[Constant(value=7)], keywords=[])], keywords=[]), body=[Pass()], orelse=[])
+
+        iter_taints = self.analyse_statement(for_statement.iter, implicit)
+        for taint in iter_taints:
+            taint.implicit = True
+
+        # First time entering the for
+        if for_statement.lineno not in self.cycles_iterations.keys():
+            # Create Status object
+            self.cycles_iterations[for_statement.lineno] = CycleStatus()
+
+        for_status = self.cycles_iterations.get(for_statement.lineno)
+
+        self.handler_reference.add_analyser(deepcopy(self), f'Exiting For block from line {for_statement.lineno} after {for_status.iteration_count} iterations')
+
+        for_assign = ast.Assign(targets=[for_statement.target], value=for_statement.iter, lineno=for_statement.lineno)
+
+        if for_status.should_continue(variables=self.variables):
+            # Creates ImplicitStatements with the implicit taints from the while condition
+            for_flow = [ImplicitStatement(taints=iter_taints + implicit, statement=stmt) for stmt in for_statement.body]
+            # Resets AST to the state before the while was processed and prepends the statements inside the while
+            flow = [for_assign] + for_flow + [for_statement]
+            logger.debug(f'L{for_statement.lineno} While: preppending flow: {[stmt.lineno for stmt in flow]}')
+            self.ast.body = flow + self.ast.body
+
+        # For stmt doesn't need to return a list of taints since it can never be used in an expression
+        return []
+
     def while_statement(self, while_statement: ast.While, implicit: list[Taint]) -> list[Taint]:
         # While(test=Compare(...), body=[...], type_ignores=[])
 
@@ -436,11 +467,11 @@ class Analyser:
             taint.implicit = True
 
         # First time entering the while
-        if while_statement.lineno not in self.whiles_iterations.keys():
+        if while_statement.lineno not in self.cycles_iterations.keys():
             # Create Status object
-            self.whiles_iterations[while_statement.lineno] = WhileStatus()
+            self.cycles_iterations[while_statement.lineno] = CycleStatus()
 
-        while_status = self.whiles_iterations.get(while_statement.lineno)
+        while_status = self.cycles_iterations.get(while_statement.lineno)
 
         # Analyse not entering the while
         self.handler_reference.add_analyser(deepcopy(self), f'Exiting While block from line {while_statement.lineno} after {while_status.iteration_count} iterations')
