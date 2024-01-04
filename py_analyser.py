@@ -99,7 +99,7 @@ class Taint:
             self.source_line == other.source_line and \
             self.implicit == other.implicit and \
             self.pattern_name == other.pattern_name and \
-            self.sanitizer == other.sanitizer
+            set(self.sanitizer) == set(other.sanitizer)
 
     def __hash__(self):
         return hash((self.source, self.source_line, self.implicit, self.pattern_name, tuple(self.sanitizer)))
