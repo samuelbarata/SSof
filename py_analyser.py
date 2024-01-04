@@ -488,8 +488,10 @@ class Analyser:
             self.cycles_iterations[for_statement.lineno] = CycleStatus()
 
         for_status = self.cycles_iterations.get(for_statement.lineno)
-
-        self.handler_reference.add_analyser(deepcopy(self), f'Exiting For block from line {for_statement.lineno} after {for_status.iteration_count} iterations')
+        # Analyse not entering/exiting the while
+        else_analyser = deepcopy(self)
+        else_analyser.ast.body = [ImplicitStatement(taints=iter_taints + implicit, statement=stmt) for stmt in for_statement.orelse] + else_analyser.ast.body
+        self.handler_reference.add_analyser(else_analyser, f'Exiting For block from line {for_statement.lineno} after {for_status.iteration_count} iterations')
 
         for_assign = ast.Assign(targets=[for_statement.target], value=for_statement.iter, lineno=for_statement.lineno)
 
@@ -519,8 +521,10 @@ class Analyser:
 
         while_status = self.cycles_iterations.get(while_statement.lineno)
 
-        # Analyse not entering the while
-        self.handler_reference.add_analyser(deepcopy(self), f'Exiting While block from line {while_statement.lineno} after {while_status.iteration_count} iterations')
+        # Analyse not entering/exiting the while
+        else_analyser = deepcopy(self)
+        else_analyser.ast.body = [ImplicitStatement(taints=statement_taints + implicit, statement=stmt) for stmt in while_statement.orelse] + else_analyser.ast.body
+        self.handler_reference.add_analyser(else_analyser, f'Exiting While block from line {while_statement.lineno} after {while_status.iteration_count} iterations')
 
         # if taints are still flowing through the while, analyse entering the while again (breanking condition)
         if while_status.should_continue(variables=self.variables):
