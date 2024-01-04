@@ -65,7 +65,7 @@ class Taint:
         self.source_line = source_line
         self.implicit = implicit
         self.pattern_name = pattern
-        self.sanitizer = []
+        self.sanitizer: set = set()
 
     def add_sanitizer(self, sanitizer: str, line: int):
         """
@@ -76,8 +76,7 @@ class Taint:
             - line (int): The line where the sanitizer is called
         """
         sanitizer_tuple = (sanitizer, line)
-        if sanitizer_tuple not in self.sanitizer:
-            self.sanitizer.append(sanitizer_tuple)
+        self.sanitizer.add(sanitizer_tuple)
 
     def is_sanitized(self) -> bool:
         return len(self.sanitizer) > 0
@@ -88,7 +87,7 @@ class Taint:
             self.source_line == other.source_line and \
             self.implicit == other.implicit and \
             self.pattern_name == other.pattern_name and \
-            set(self.sanitizer) == set(other.sanitizer)
+            self.sanitizer == other.sanitizer
 
     def __hash__(self):
         return hash((self.source, self.source_line, self.implicit, self.pattern_name, tuple(self.sanitizer)))
@@ -862,12 +861,13 @@ class Analyser_Handler():
                         'unsanitized_flows': 'no',
                         'sanitized_flows': []
                         }
+            sanitized_flows = set()
             for vuln in g:
                 if vuln.taint.is_sanitized():
-                    if vuln.taint.sanitizer not in vuln_out['sanitized_flows']:
-                        vuln_out['sanitized_flows'].append(list(vuln.taint.sanitizer))
+                    sanitized_flows.add(tuple(vuln.taint.sanitizer))
                 else:
                     vuln_out['unsanitized_flows'] = 'yes'
+            vuln_out['sanitized_flows'] = list(sanitized_flows)
             vulnerabilities.append(vuln_out)
 
         return json.dumps(vulnerabilities, indent=4)
