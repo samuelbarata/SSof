@@ -109,27 +109,31 @@ Common Slices:
     - mkdir -p $SLICES_FOLDER
     - |
       cd common-tests/
-      for folder in */; do
-        folder_name=$(basename "$folder")
+      remote_branches=$(git branch -r | grep -v "origin/HEAD")
+      for branch in $remote_branches; do
+        git checkout $branch
+        for folder in */; do
+          folder_name=$(basename "$folder")
 
-        # Skip destination folder
-        if [ "$folder_name" == "tests" ]; then
-          continue
-        fi
-
-        # Loop through each file in the current folder
-        for file in "$folder"/*; do
-          if [ -f "$file" ]; then
-            file_name=$(basename "$file")
-
-            # Construct the new file name by prepending the folder name
-            new_file_name="${folder_name}_${file_name}"
-
-            # Copy the file to the tests directory with the new name
-            cp "$file" "./tests/$new_file_name"
-
-            echo "Copied: $file to ./tests/$new_file_name"
+          # Skip destination folder
+          if [ "$folder_name" == "tests" ]; then
+            continue
           fi
+
+          # Loop through each file in the current folder
+          for file in "$folder"/*; do
+            if [ -f "$file" ]; then
+              file_name=$(basename "$file")
+
+              # Construct the new file name by prepending the folder name
+              new_file_name="${folder_name}_${file_name}"
+
+              # Copy the file to the tests directory with the new name
+              cp "$file" "./tests/$new_file_name"
+
+              echo "Copied: $file to ./tests/$new_file_name"
+            fi
+          done
         done
       done
       cd ..
