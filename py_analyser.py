@@ -462,13 +462,12 @@ class Analyser:
         # We can treat the if block and the else block as entire seperate ASTs.
         # We can create a new analyser instance for each blocks
 
-        else_analyser = deepcopy(self)
-
         if_flow = [ImplicitStatement(taints=statement_taints + implicit, statement=stmt) for stmt in if_statement.body]
         else_flow = [ImplicitStatement(taints=statement_taints + implicit, statement=stmt) for stmt in if_statement.orelse]
 
-        # NOTE: make sure to add the else analyser first, so that the else_analyser.ast.body is not affected by the altered self.ast.body
-        else_analyser.ast.body = else_flow + self.ast.body
+        # NOTE: else_analyser needs to be cloned before we modify the self.ast.body
+        else_analyser = deepcopy(self)
+        else_analyser.ast.body = else_flow + else_analyser.ast.body
         self.ast.body = if_flow + self.ast.body
         self.handler_reference.add_analyser(else_analyser, f'Entering Else block from line {if_statement.lineno}')
 
