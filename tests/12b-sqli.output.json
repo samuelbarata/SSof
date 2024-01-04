@@ -1,0 +1,16 @@
+[
+  {
+    "vulnerability": "SQL injection A",
+    "source": ["get", 8],
+    "sink": ["execute", 13],
+    "unsanitized_flows": "yes",
+    "sanitized_flows": []
+  },
+  {
+    "vulnerability": "SQL injection A",
+    "source": ["get", 9],
+    "sink": ["execute", 13],
+    "unsanitized_flows": "yes",
+    "sanitized_flows": []
+  }
+]
