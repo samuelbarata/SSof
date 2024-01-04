@@ -308,9 +308,102 @@ class Analyser:
                 return self.for_statement(statement, implicit)
             case ast.AugAssign():
                 return self.aug_assign(statement, implicit)
+            case ast.JoinedStr():
+                return self.joined_str(statement, implicit)
+            case ast.FormattedValue():
+                return self.formatted_value(statement, implicit)
+            case ast.Import():
+                return self.import_statement(statement, implicit)
+            case ast.NamedExpr():
+                return self.named_expr(statement, implicit)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
+
+    def named_expr(self, named_expr: ast.NamedExpr, implicit: list[Taint]) -> list[Taint]:
+        """
+        Parameters:
+            - named_expr (ast.NamedExpr): The named expression to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the named expression
+
+        Returns:
+            - list[Taint]: The taints found in the named expression
+        """
+        # NamedExpr(target=Name(id='x', ctx=Store()),value=Constant(value=4))
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
+
+        taints.extend(self.analyse_statement(ast.Assign(targets=[named_expr.target], value=named_expr.value, lineno=named_expr.lineno), implicit))
+        return taints
+
+    def import_statement(self, import_statement: ast.Import, implicit: list[Taint]) -> list[Taint]:
+        """
+        Parameters:
+            - import_statement (ast.Import): The import statement to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the import statement
+
+        Returns:
+            - list[Taint]: The taints found in the import statement
+        """
+        # Implemented:
+        # Import(names=[alias(name='ast')])
+        # Import(names=[alias(name='get'), alias(name='post')])
+        # Not Implemented:
+        # Import(names=[alias(name='ast.path')])
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
+
+        for alias in import_statement.names:
+            # Create an assign statement for each import to mark it as initialized
+            assign = ast.Assign(targets=[ast.Name(id=alias.name, ctx=ast.Store())], value=ast.Constant(value=None), lineno=-1)
+            assign = ImplicitStatement(taints=implicit, statement=assign)
+            self.ast.body.insert(0, assign)
+        return taints
+
+    def formatted_value(self, formatted_value: ast.FormattedValue, implicit: list[Taint]) -> list[Taint]:
+        """
+        Parameters:
+            - formatted_value (ast.FormattedValue): The formatted value to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the formatted value
+
+        Returns:
+            - list[Taint]: The taints found in the formatted value
+        """
+        # FormattedValue(value=Name(id='sourceA', ctx=Load()), conversion=-1)
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
+
+        taints.extend(self.analyse_statement(formatted_value.value, implicit))
+        logger.debug(f'L{formatted_value.lineno} FormattedValue: {taints}')
+        return taints
+
+    def joined_str(self, joined_str: ast.JoinedStr, implicit: list[Taint]) -> list[Taint]:
+        """
+        Parameters:
+            - joined_str (ast.JoinedStr): The joined string to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the joined string
+
+        Returns:
+            - list[Taint]: The taints found in the joined string
+        """
+        # JoinedStr(values=[Constant(value='User = '), FormattedValue(value=Name(id='sourceA', ctx=Load()), conversion=-1), Constant(value=' and Password = '), FormattedValue(value=Name(id='sourceB', ctx=Load()), conversion=-1)])
+
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
+
+        for value in joined_str.values:
+            taints.extend(self.analyse_statement(value, implicit))
+
+        logger.debug(f'L{joined_str.lineno} JoinedStr: {taints}')
+        return taints
 
     def aug_assign(self, aug_assign: ast.AugAssign, implicit: list[Taint]) -> list[Taint]:
         """

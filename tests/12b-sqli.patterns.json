@@ -1,0 +1,29 @@
+[
+  {
+    "vulnerability": "SQL injection A",
+    "sources": [
+      "get",
+      "get_object_or_404",
+      "QueryDict",
+      "ContactMailForm",
+      "ChatMessageForm"
+    ],
+    "sanitizers": ["mogrify", "escape_string"],
+    "sinks": ["execute"],
+    "implicit": "no"
+  },
+
+  {
+    "vulnerability": "SQL injection B",
+    "sources": [
+      "QueryDict",
+      "ContactMailForm",
+      "ChatMessageForm",
+      "copy",
+      "get_query_string"
+    ],
+    "sanitizers": ["mogrify", "escape_string"],
+    "sinks": ["raw", "RawSQL"],
+    "implicit": "yes"
+  }
+]

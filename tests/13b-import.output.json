@@ -1,0 +1,41 @@
+[
+    {
+        "vulnerability": "A",
+        "source": [
+            "my_python_program",
+            1
+        ],
+        "sink": [
+            "sink",
+            1
+        ],
+        "unsanitized_flows": "yes",
+        "sanitized_flows": []
+    },
+    {
+        "vulnerability": "A",
+        "source": [
+            "ast",
+            1
+        ],
+        "sink": [
+            "sink",
+            1
+        ],
+        "unsanitized_flows": "yes",
+        "sanitized_flows": []
+    },
+    {
+        "vulnerability": "A",
+        "source": [
+            "my_python_program",
+            5
+        ],
+        "sink": [
+            "sink",
+            5
+        ],
+        "unsanitized_flows": "yes",
+        "sanitized_flows": []
+    }
+]
