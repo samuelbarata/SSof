@@ -311,11 +311,57 @@ class Analyser:
                 return self.while_statement(statement, implicit)
             case ast.Tuple():
                 return self.tuple_object(statement, implicit)
+            case ast.Break():
+                return self.break_statement(statement, implicit)
+            case ast.Continue():
+                return self.continue_statement(statement, implicit)
             case ast.For():
                 return self.for_statement(statement, implicit)
             case _:
                 logger.critical(f'Unknown statement type: {statement}')
                 raise TypeError(f'Unknown statement type: {statement}')
+
+    def break_statement(self, break_statement: ast.Break, implicit: list[Taint]) -> list[Taint]:
+        """
+        NOTE: Implicit taints created by break statements are not implemented
+
+        Parameters:
+            - break_statement (ast.Break): The break statement to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the break statement
+
+        Returns:
+            - list[Taint]: The taints found in the break statement
+        """
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
+
+        self.remove_until_cycle()
+        # Removes the repetition of the cycle
+        self.ast.body.pop(0)
+
+        return taints
+
+    def continue_statement(self, continue_statement: ast.Continue, implicit: list[Taint]) -> list[Taint]:
+        """
+        NOTE: Implicit taints created by continue statements are not implemented
+
+        Parameters:
+            - continue_statement (ast.Continue): The continue statement to analyse
+            - implicit (list[Taint]): The implicit taints to pass to the continue statement
+
+        Returns:
+            - list[Taint]: The taints found in the continue statement
+        """
+        if IMPLICITS_TO_EXPRESSIONS:
+            taints = deepcopy(implicit)
+        else:
+            taints = []
+
+        self.remove_until_cycle()
+
+        return taints
 
     def bool_op(self, bool_op: ast.BoolOp, implicit: list[Taint]) -> list[Taint]:
         """
@@ -723,6 +769,13 @@ class Analyser:
                     self.vulnerabilities.append(vuln)
                     logger.info(f"Found vulnerability: {vuln.name}")
                     logger.debug(f"L{lineno} Vulnerability details: {vuln}")
+
+    def remove_until_cycle(self):
+        """
+        Removes all queued statements for analysis until the next while or for statement
+        """
+        while len(self.ast.body) > 0 and not isinstance(self.ast.body[0], (ast.While, ast.For)):
+            self.ast.body.pop(0)
 
 
 class Analyser_Handler():
