@@ -16,11 +16,11 @@
         "vulnerability": "A_2",
         "source": [
             "source",
-            8
+            9
         ],
         "sink": [
             "sink",
-            10
+            11
         ],
         "unsanitized_flows": "yes",
         "sanitized_flows": []
@@ -42,11 +42,11 @@
         "vulnerability": "A_4",
         "source": [
             "source",
-            7
+            8
         ],
         "sink": [
             "sink",
-            10
+            11
         ],
         "unsanitized_flows": "yes",
         "sanitized_flows": []
@@ -55,11 +55,11 @@
         "vulnerability": "A_5",
         "source": [
             "source",
-            12
+            13
         ],
         "sink": [
             "sink",
-            15
+            16
         ],
         "unsanitized_flows": "yes",
         "sanitized_flows": []
