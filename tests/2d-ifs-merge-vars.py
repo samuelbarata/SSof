@@ -6,3 +6,5 @@ else:
     b=1
 
 sink(b)
+
+# nested ifs

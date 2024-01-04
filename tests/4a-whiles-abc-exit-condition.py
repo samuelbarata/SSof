@@ -52,3 +52,5 @@ while True:
     c = b
     b = a
 sink(o)
+
+# Wait for taints to stop propagate in whiles before breaking the execution

@@ -6,3 +6,5 @@ if True:
 else:
     tmp = sanitizer(a.b.c)
 sink(tmp)
+
+# both branches are sanitized

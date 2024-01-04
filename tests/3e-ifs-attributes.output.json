@@ -111,5 +111,33 @@
                 ]
             ]
         ]
+    },
+    {
+      "vulnerability": "A_6",
+      "source": ["source", 22],
+      "sink": ["sink", 27],
+      "unsanitized_flows": "yes",
+      "sanitized_flows": []
+    },
+    {
+      "vulnerability": "A_7",
+      "source": ["source", 23],
+      "sink": ["sink", 27],
+      "unsanitized_flows": "yes",
+      "sanitized_flows": []
+    },
+    {
+      "vulnerability": "A_8",
+      "source": ["source", 24],
+      "sink": ["sink", 27],
+      "unsanitized_flows": "yes",
+      "sanitized_flows": []
+    },
+    {
+      "vulnerability": "A_9",
+      "source": ["source", 25],
+      "sink": ["sink", 27],
+      "unsanitized_flows": "yes",
+      "sanitized_flows": []
     }
 ]

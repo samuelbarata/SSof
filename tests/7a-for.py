@@ -14,3 +14,4 @@ for a in 'ola':
     pass
 sink(a)
 
+# for assignments

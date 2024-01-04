@@ -5,3 +5,5 @@ while(True):
     a = source()
 
 sink(a)
+
+# test break

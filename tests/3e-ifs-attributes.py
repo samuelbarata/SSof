@@ -18,10 +18,12 @@ else:
 sink(a.b.c.k)
 sink(sanitizer(a.b.c.k))
 
+# test reassign of attributes
+a = source()
+a.b = source()
+a.b.c = source()
+a.b.c.k = source()
 
-#a = source()
-#a.b = source()
-#a.b.c = source()
-#a.b.c.k = source()
+sink(a)
 
-#sink(a)
+# extensive test of attributes

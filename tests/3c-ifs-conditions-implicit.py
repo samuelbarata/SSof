@@ -5,3 +5,5 @@ if(e==0):
 else:
     e=0
 sink(e)
+
+# Altough the variable is rewritten on both branches, there is an implicit flow

@@ -6,3 +6,5 @@ else:
     sink(a)
 
 sink(a)
+
+# taints in one branch don't interfere with the other one

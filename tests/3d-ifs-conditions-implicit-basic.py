@@ -6,3 +6,5 @@ if(c == 0):
 else:
     e=0
 sink(e)
+
+# Basic implicit flow

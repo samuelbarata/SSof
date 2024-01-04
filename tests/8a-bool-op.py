@@ -6,3 +6,5 @@ if(a and b or c):
     k = source()
 
 sink(k)
+
+# BoolOp

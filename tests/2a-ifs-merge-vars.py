@@ -1,3 +1,4 @@
+a = source()
 if(c>0):
     a=0
 else:
@@ -5,3 +6,5 @@ else:
     b=source()
 sink(a)
 sink(b)
+
+# variable with taint is rewritten

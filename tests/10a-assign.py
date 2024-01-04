@@ -6,3 +6,5 @@ sink(c)
 a,b = (True, source())
 sink(a)
 sink(b)
+
+# assign multiple targets
