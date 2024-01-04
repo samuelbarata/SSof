@@ -20,6 +20,14 @@ LOG_LEVELS = {
     'CRITICAL': logging.CRITICAL,
 }
 
+def hash_set(s):
+    """
+    Return a hash for a set of flows
+    """
+    h = 0
+    for k in s:
+        h += hash(k)
+    return hash(h)
 
 def make_folder_exist(folder):
     """
@@ -90,7 +98,7 @@ class Taint:
             self.sanitizer == other.sanitizer
 
     def __hash__(self):
-        return hash((self.source, self.source_line, self.implicit, self.pattern_name, tuple(self.sanitizer)))
+        return hash((self.source, self.source_line, self.implicit, self.pattern_name, hash_set(self.sanitizer)))
 
     def __repr__(self) -> str:
         return f"Taint(Source: {self.source}, Source Line: {self.source_line}, Implicit: {self.implicit}, Sanitized: {self.is_sanitized()}, Pattern: {self.pattern_name})"
@@ -823,6 +831,7 @@ class Analyser_Handler():
         Returns:
             - str: The results of the analysis in JSON format
         """
+
         if logger.isEnabledFor(logging.DEBUG):
             self.display_logs()
 
@@ -861,13 +870,20 @@ class Analyser_Handler():
                         'unsanitized_flows': 'no',
                         'sanitized_flows': []
                         }
-            sanitized_flows = set()
+
+            inserted_flows = set()
+            sanitized_flows = []
             for vuln in g:
                 if vuln.taint.is_sanitized():
-                    sanitized_flows.add(tuple(vuln.taint.sanitizer))
+                    h = hash_set(vuln.taint.sanitizer)
+                    if h in inserted_flows:
+                        pass
+                    else:
+                        inserted_flows.add(h)
+                        sanitized_flows.append(tuple(vuln.taint.sanitizer))
                 else:
                     vuln_out['unsanitized_flows'] = 'yes'
-            vuln_out['sanitized_flows'] = list(sanitized_flows)
+            vuln_out['sanitized_flows'] = sanitized_flows
             vulnerabilities.append(vuln_out)
 
         return json.dumps(vulnerabilities, indent=4)

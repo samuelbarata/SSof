@@ -10,6 +10,6 @@ while True:
         d = b4(d)
 sink(d)
 
-# consider all possible combinations
+# consider all possible combinations without repeated sanitizer flows
 
 # test inspired by T49-15/6h-sanitizers.py
