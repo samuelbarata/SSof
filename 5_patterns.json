@@ -1,0 +1,65 @@
+[
+  {
+    "vulnerability": "Possible arbitrary code execution: serialization",
+    "sources": ["input", "request"],
+    "sanitizers": [],
+    "sinks": ["pickle.dump"],
+    "implicit": "no"
+  },
+  {
+    "vulnerability": "possible disk volume exhaustion: zipbomb",
+    "sources": ["zipfile.ZipFile"],
+    "sanitizers": [],
+    "sinks": ["extractall", "extract"],
+    "implicit": "no",
+	"comments": "source: https://docs.python.org/3/library/zipfile.html#resources-limitations"
+  },
+  {
+    "vulnerability": "open file without priveleges",
+    "sources": ["input", "request"],
+    "sanitizers": [],
+    "sinks": ["os.path.join"],
+    "implicit": "no",
+	"comments":"source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#3-absolute-path-joins"
+  },
+  {
+    "vulnerability": "path traversal attack: temporary file in arbitrary location",
+    "sources": ["input", "request"],
+    "sanitizers": [],
+    "sinks": ["tempfile.NamedTemporaryFile"],
+    "implicit": "no",
+	"comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#4-arbitrary-temp-files"
+  },
+  {
+    "vulnerability": "zip splip: tarfile",
+    "sources": ["tarfile.TarFile"],
+    "sanitizers": ["os.path.basename"],
+    "sinks": ["extractall", "extract"],
+    "implicit": "no",
+	"comments": "source: https://bugs.python.org/issue35909"
+  },
+  {
+    "vulnerability": "zip splip: zipfile",
+    "sources": ["zipfile.ZipFile"],
+    "sanitizers": ["extractall", "extract"],
+    "sinks": ["extractall", "extract"],
+    "implicit": "no",
+	"comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#4-arbitrary-temp-files"
+  },
+  {
+    "vulnerability": "incomplete Regex match: re.match does not match on new lines",
+    "sources": ["input", "request"],
+    "sanitizers": [""],
+    "sinks": ["re.match"],
+    "implicit": "no",
+	"comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#6-incomplete-regex-match"
+  },
+  {
+    "vulnerability": "unicode sanitizer bypass",
+    "sources": ["input", "request"],
+    "sanitizers": ["django.utils.html.escape"],
+    "sinks": ["unicodedata.normalize"],
+    "implicit": "no",
+	"comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#6-incomplete-regex-match"
+  }
+]
