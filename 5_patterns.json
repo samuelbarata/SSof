@@ -12,7 +12,7 @@
     "sanitizers": [],
     "sinks": ["extractall", "extract"],
     "implicit": "no",
-	"comments": "source: https://docs.python.org/3/library/zipfile.html#resources-limitations"
+    "comments": "source: https://docs.python.org/3/library/zipfile.html#resources-limitations"
   },
   {
     "vulnerability": "open file without priveleges",
@@ -20,7 +20,7 @@
     "sanitizers": [],
     "sinks": ["os.path.join"],
     "implicit": "no",
-	"comments":"source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#3-absolute-path-joins"
+    "comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#3-absolute-path-joins"
   },
   {
     "vulnerability": "path traversal attack: temporary file in arbitrary location",
@@ -28,7 +28,7 @@
     "sanitizers": [],
     "sinks": ["tempfile.NamedTemporaryFile"],
     "implicit": "no",
-	"comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#4-arbitrary-temp-files"
+    "comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#4-arbitrary-temp-files"
   },
   {
     "vulnerability": "zip splip: tarfile",
@@ -36,7 +36,7 @@
     "sanitizers": ["os.path.basename"],
     "sinks": ["extractall", "extract"],
     "implicit": "no",
-	"comments": "source: https://bugs.python.org/issue35909"
+    "comments": "source: https://bugs.python.org/issue35909"
   },
   {
     "vulnerability": "zip splip: zipfile",
@@ -44,7 +44,7 @@
     "sanitizers": ["extractall", "extract"],
     "sinks": ["extractall", "extract"],
     "implicit": "no",
-	"comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#4-arbitrary-temp-files"
+    "comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#4-arbitrary-temp-files"
   },
   {
     "vulnerability": "incomplete Regex match: re.match does not match on new lines",
@@ -52,7 +52,7 @@
     "sanitizers": [""],
     "sinks": ["re.match"],
     "implicit": "no",
-	"comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#6-incomplete-regex-match"
+    "comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#6-incomplete-regex-match"
   },
   {
     "vulnerability": "unicode sanitizer bypass",
@@ -60,6 +60,20 @@
     "sanitizers": ["django.utils.html.escape"],
     "sinks": ["unicodedata.normalize"],
     "implicit": "no",
-	"comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#6-incomplete-regex-match"
+    "comments": "source: https://www.sonarsource.com/blog/10-unknown-security-pitfalls-for-python/#6-incomplete-regex-match"
+  },
+  {
+    "vulnerability": "arbitrary code execution",
+    "sources": ["input", "request"],
+    "sanitizers": ["os.path.normpath", "os.path.basename"],
+    "sinks": ["eval", "exec", "os.system", "subprocess.run", "subprocess.call"],
+    "implicit": "no"
+  },
+  {
+    "vulnerability": "Server-Side Request Forgery",
+    "sources": ["request"],
+    "sanitizers": [],
+    "sinks": ["requests.get", "requests.post", "requests.put"],
+    "implicit": "no"
   }
 ]
