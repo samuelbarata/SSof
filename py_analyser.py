@@ -56,7 +56,7 @@ class Pattern:
         self.sanitizers = object["sanitizers"]
         self.sinks = object["sinks"]
         self.implicit = False if object["implicit"] == 'no' else True
-        self.interrupt = False if object["interrupt"] == 'no' else True
+        self.interrupt = False if "interrupt" not in object or object["interrupt"] == 'no' else True
         logger.debug(f'Loaded pattern:\n{self}')
 
     def __str__(self):
@@ -677,19 +677,9 @@ class Analyser:
         # Variable was never assigned a value [Uninitialized]
         if name.id not in self.variables.get_variables():
             return taints
-            taints.extend([Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns])
-            logger.debug(f'L{name.lineno} Uninitialized variable {name.id}: {taints}')
-            return taints
 
         # Get taints from initialized variable
         taints.extend(deepcopy(self.variables.variables[name.id].get_taints()))
-        # Check if variable was not initialized in at least one flow
-        if not self.variables.variables[name.id].initialized:
-            taints.extend([Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns])
-        # Check if variable is source
-        for pattern in self.patterns:
-            if name.id in pattern.sources:
-                taints.append(Taint(name.id, name.lineno, pattern.vulnerability))
 
         logger.debug(f'L{name.lineno} {name.id}: {taints}')
         return taints
@@ -881,8 +871,9 @@ class Analyser:
                 if taint.pattern_name == pattern.vulnerability:
                     # Deepcopy to prevent future sanitizers from affecting this taint
                     vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), name, lineno)
-                    self.vulnerabilities.append(vuln)
                     # b)
+                    # will overwrite the list of vulnerabilities
+                    self.vulnerabilities = [vuln]
                     if pattern.interrupt:
                         # will remove all other statements that were to be analysed
                         self.ast.body = []
@@ -946,22 +937,15 @@ class Analyser_Handler():
             vulnerabilities.extend(a.vulnerabilities)
         groups: list[list[Vulnerability]] = []
 
-        interrupt = False
-        interrupt_vulns = []
-
         for vuln in vulnerabilities:
             # Ignore implicit vulnerabilities for patterns that don't require it
             skip_implicit = False
             for pattern in patterns:
                 if vuln.taint.pattern_name == pattern.vulnerability:
-                    if pattern.interrupt:
-                        interrupt = True
-                        interrupt_vulns.append(vuln)
-                        break
                     if not pattern.implicit and vuln.taint.implicit:
                         skip_implicit = True
                         break
-            if skip_implicit or interrupt:
+            if skip_implicit:
                 continue
 
             matched = False
@@ -973,11 +957,8 @@ class Analyser_Handler():
             if not matched:
                 groups.append([vuln])
 
-        if len(groups) == 0 and not interrupt:
+        if len(groups) == 0:
             return json.dumps([])
-
-        if interrupt:
-            groups = [interrupt_vulns]
 
         vulnerabilities = []
         for g in groups:
