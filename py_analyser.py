@@ -56,6 +56,7 @@ class Pattern:
         self.sanitizers = object["sanitizers"]
         self.sinks = object["sinks"]
         self.implicit = False if object["implicit"] == 'no' else True
+        self.interrupt = False if object["interrupt"] == 'no' else True
         logger.debug(f'Loaded pattern:\n{self}')
 
     def __str__(self):
@@ -137,7 +138,7 @@ class VariableTaints:
         """
         Return the taints of the variable and all the taints of its attributes
         """
-        ret = self.taints
+        ret = deepcopy(self.taints)
         for var in self.variables:
             ret.extend(self.variables[var].get_taints())
         return ret
@@ -667,9 +668,15 @@ class Analyser:
         else:
             taints = []
 
+        # Check if variable is source
+        for pattern in self.patterns:
+            if name.id in pattern.sources:
+                taints.append(Taint(name.id, name.lineno, pattern.vulnerability))
+
         # Name(id='a', ctx=Load())
         # Variable was never assigned a value [Uninitialized]
         if name.id not in self.variables.get_variables():
+            return taints
             taints.extend([Taint(name.id, name.lineno, pattern.vulnerability) for pattern in self.patterns])
             logger.debug(f'L{name.lineno} Uninitialized variable {name.id}: {taints}')
             return taints
@@ -779,6 +786,9 @@ class Analyser:
             else:
                 target_list.append(target)
 
+        # Filter out repeated taints
+        taints_to_assign = list(set(taints + implicit))
+
         for target in target_list:
             attributes_list = self.get_name(target)
 
@@ -789,10 +799,7 @@ class Analyser:
 
                 variable_taint = variable_taint.variables[attribute]
 
-            # Filter out repeated taints
-            taints_to_assign = list(set(taints + implicit))
-
-            variable_taint.assign_taints(taints_to_assign)
+            variable_taint.assign_taints(deepcopy(taints_to_assign))
             logger.debug(f'L{assignment.lineno} {attributes_list}: {taints}')
 
         for pattern in self.patterns:
@@ -875,6 +882,10 @@ class Analyser:
                     # Deepcopy to prevent future sanitizers from affecting this taint
                     vuln = Vulnerability(pattern.vulnerability, deepcopy(taint), name, lineno)
                     self.vulnerabilities.append(vuln)
+                    # b)
+                    if pattern.interrupt:
+                        # will remove all other statements that were to be analysed
+                        self.ast.body = []
                     logger.info(f"Found vulnerability: {vuln.name}")
                     logger.debug(f"L{lineno} Vulnerability details: {vuln}")
 
@@ -934,15 +945,23 @@ class Analyser_Handler():
         for a in self.analysers:
             vulnerabilities.extend(a.vulnerabilities)
         groups: list[list[Vulnerability]] = []
+
+        interrupt = False
+        interrupt_vulns = []
+
         for vuln in vulnerabilities:
             # Ignore implicit vulnerabilities for patterns that don't require it
             skip_implicit = False
             for pattern in patterns:
                 if vuln.taint.pattern_name == pattern.vulnerability:
+                    if pattern.interrupt:
+                        interrupt = True
+                        interrupt_vulns.append(vuln)
+                        break
                     if not pattern.implicit and vuln.taint.implicit:
                         skip_implicit = True
                         break
-            if skip_implicit:
+            if skip_implicit or interrupt:
                 continue
 
             matched = False
@@ -954,8 +973,11 @@ class Analyser_Handler():
             if not matched:
                 groups.append([vuln])
 
-        if len(groups) == 0:
+        if len(groups) == 0 and not interrupt:
             return json.dumps([])
+
+        if interrupt:
+            groups = [interrupt_vulns]
 
         vulnerabilities = []
         for g in groups:
