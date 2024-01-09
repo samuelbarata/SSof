@@ -48,3 +48,11 @@ Linting
 autopep8 py_analyser.py --experimental --ignore E501 -i
 ```
 -->
+
+## Practical Test
+
+A) The tool should not report uninitialized variables as sources
+
+B) The pattern should have an extra field `interrupt` with values `"yes" | "no"` that indicates if the pattern should interrupt the analysis
+
+- If a vulnerability is matched to this pattern, the analysis should stop and only this vulnerability should be reported
